@@ -1,0 +1,20 @@
+{
+  "name": "fourierboard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "傅里叶画板：SVG 路径 → 傅里叶公式（冻结资产）→ 数值重演 → 视频导出",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run test",
+    "coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "5.0.4",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.4"
+  }
+}
