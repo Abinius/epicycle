@@ -1,0 +1,113 @@
+# 傅里叶画板 · FourierBoard
+
+[![CI](https://github.com/Abinius/fourierboard/actions/workflows/ci.yml/badge.svg)](https://github.com/Abinius/fourierboard/actions/workflows/ci.yml)
+![纯前端](https://img.shields.io/badge/纯前端-零后端_·_不上传-3F6B4F)
+![运行时依赖](https://img.shields.io/badge/运行时依赖-5_个_·_全_MIT-3F6B4F)
+![Node](https://img.shields.io/badge/node-24-339933?logo=nodedotjs&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white)
+![Vitest](https://img.shields.io/badge/Vitest-5-6E9F18?logo=vitest&logoColor=white)
+![Playwright](https://img.shields.io/badge/Playwright-1.64-2EAD33?logo=playwright&logoColor=white)
+
+上传一条 SVG 路径（或直接手绘一笔）→ 得到它的**傅里叶公式** → 冻结成资产 → 用任意数值重演 → 导出成品视频。
+
+全部在浏览器本地计算：不上传、不收集、无需账号。
+
+> 任何闭合曲线，都是一串同步旋转的圆。
+
+## 它是什么
+
+- **C1 · 冻结公式**：把任意 SVG / 手绘线条换算成一组精确系数，动画就是这组系数的严格重构。冻结产出不可变的 `FourierAsset`——可存进本地资产库、可导出成 JSON、可重新导入、可反复演绎。
+- **C2 · 数值重演**：以冻结资产为基底，把数值注入参数向量 θ 实时重演。三个层级：全局参数 / 单系数编辑 / 任意数字序列映射。
+- **C3 · 导出**：WebCodecs + mp4-muxer 逐帧离屏渲染，导出的每一帧与预览逐帧一致。
+
+## 现在做到哪了
+
+| 里程碑 | 内容 | 状态 |
+| --- | --- | --- |
+| M0 | 脚手架 + CI 五项门禁 + 数学契约 | ✅ |
+| M1 | 数学内核（FFT / 采样 / 渲染纯函数）+ 数值黄金样张 V-1…V-6 | ✅ |
+| M2 | SVG 上传 + 手绘输入 + Worker + 冻结资产 + IndexedDB 资产库 | ✅ |
+| M3 | 公式面板（KaTeX 代入式）+ 系数表 + 频谱 + 六个预置 | ✅ |
+| M4 | C2 算子引擎（L1/L2 补全、模式 Y 通路、分享短码） | ⬜ |
+| M5 | C3 导出引擎（WebCodecs + 降级链 + GIF/PNG 序列） | ⬜ |
+| M6 | 打磨与上线（移动端 / 无障碍 / 中英双语 / 部署） | ⬜ |
+
+## 快速开始
+
+```bash
+npm ci
+npm run dev          # http://localhost:5173
+```
+
+Node 24（CI 用的版本）。Windows 上如果 vitest 起不来并报 `Cannot find native binding`，是 rolldown 的原生绑定下到了损坏文件——删掉 `node_modules/@rolldown/binding-win32-x64-msvc` 重新 `npm install` 即可。
+
+## 门禁
+
+| 命令 | 卡什么 |
+| --- | --- |
+| `npm run typecheck` | `tsc --noEmit`，strict + `verbatimModuleSyntax` + `isolatedModules` |
+| `npm run lint` | ESLint，**含「`core/` 不许 import 浏览器 API」这条架构约束** |
+| `npm test` / `npm run coverage` | 单元测试 + 数值黄金样张 V-1…V-6；覆盖率阈值 90 / 85 / 90 / 90 |
+| `npm run build` | 构建 + 首屏 gzip ≤ 300 KB |
+| `npm run e2e` | Playwright 端到端（本机浏览器通道不通时用 `PLAYWRIGHT_CHANNEL=msedge npm run e2e`） |
+| `npm run check` | 上面四条串起来跑，CI 就是这四步再加 E2E |
+
+**2026-10-15 实测**：175 个单测全绿，覆盖率 stmts 98.79 / branch 92.05 / funcs 100 / lines 99.15；首屏 gzip 186.3 KB（预算 300 KB）；Playwright 10 例通过。这些数字会随开发变动，以 CI 为准。
+
+## 三条不可动摇的架构约束
+
+1. **`core/` 不 import 任何 UI / 浏览器 API**（只用 `Math`、`ArrayBuffer`、TypedArray）→ 可以 100% 单测，也可以整个搬到服务端做批量导出。
+2. **`renderFrame(ctx, scene, t)` 是纯函数**：时间只从参数进来，禁止读时钟、随机数、模块级可变状态。这是「导出与预览逐帧一致」唯一可靠的地基。渲染器只依赖一个窄 `DrawTarget` 接口，所以能在 Node 里用录制桩做纯度测试。
+3. **模式 X（系数域编辑）永不触发 DFT；模式 Y（形状域）只在 Worker 里重算**，且结果回写成一个新资产的派生，原资产不可变。
+
+## 目录结构
+
+```
+src/
+├── core/          纯数学，零依赖零 DOM，覆盖率目标 100%
+│   ├── types.ts       全产品的数据契约（Core 只依赖这一个文件）
+│   ├── dft.ts         radix-2 实 FFT → Coefficient[]（负频率按 N−n 取）
+│   ├── sampler.ts     SVG path → 等弧长 N 点（解析 → 自适应细分 → 串接 → 重采样）
+│   ├── svgtext.ts     纯文本扫描抽 <path>，不依赖 DOM
+│   ├── epicycle.ts    (系数, θ) → 渲染场景，§2.4 全部算子
+│   ├── renderer.ts    renderFrame 纯函数 + 窄 DrawTarget 接口
+│   ├── asset.ts       资产的冻结 / 校验 / JSON 往返 / 量化短码 / 指纹
+│   ├── strokes.ts     手绘笔迹 → SVG path 数据
+│   ├── formulas.ts    解析生成器（圆 / 正方形 / 心形 / 星形）
+│   └── presets.ts     六个预置（生成器 + 两条内建路径），与上传共用同一个采样器
+├── engine/        与浏览器交互的那一层
+│   ├── worker.ts      采样 + DFT 跑在 Worker 里（Transferable、轮次丢包）
+│   └── useSvgWorker.ts
+├── storage/       IndexedDB 资产库（只管存取，不碰资产语义）
+└── components/    UI（自绘面板 + Tailwind，不引 UI 组件库）
+```
+
+（只列主要文件，不是全部。）
+
+## 数学正确性怎么保证
+
+所有数值断言都写成 `core/` 的单元测试，能在 PR 里看到具体数字，而不是靠「看着像」：
+
+- **黄金样张 V-1…V-6**：单位圆 / 方波 / 心形重建 / 负频率叉积 / 相位斜坡 = 时间平移 / 渲染纯度（用录制式 `DrawTarget` 桩逐条比对绘制序列）。
+- **±n 绝不合并**：坐标信号 `z = x + iy` 本身就是复数，DFT 没有实信号那种 `c_{-n} = conj(c_n)` 的对称性——圆的 `c₊₁ = 1` 而 `c₋₁ ≈ 0`，心形反过来。按 `|n|` 合并柱状图会编造出两个圆都不存在的幅度。所以频谱是**有符号频率的双半轴**。
+- **「冻结 → 清空 → 重新导入 → 逐帧一致」**：E2E 在一个**全新的浏览器上下文**（IndexedDB 是空的）里导入刚导出的 JSON，再导出一次比对，两个文件**逐字节相同**。文本相同即系数全精度相同，而 `renderFrame` 又是纯函数，于是每一帧都相同。
+
+## 设计文档
+
+三份文档含商业内容，不随仓库分发，放在开发机上 `D:\Abin\doc\`：
+
+- `傅里叶画板_产品需求文档PRD_v2.md`
+- `傅里叶画板_开发计划_v2.md` —— M0–M6 里程碑、逐段出口标准、风险册，以及每一段的交付记录
+- `傅里叶画板_技术栈与开发文档_v2.md` —— 架构 / 数学管线 / 资产模型 / 渲染 / 导出 / 错误诊断表
+
+代码里引用它们时写作 `技术文档 §2.2` 这样的形式。
+
+## 许可证
+
+私有项目，保留所有权利（仓库内有意不放 LICENSE 文件）。
+
+## 第三方
+
+用到的全部第三方代码与许可证，见 **[THIRD-PARTY.md](THIRD-PARTY.md)** —— 会随产物进用户浏览器的只有 5 个包、全部 MIT，整个依赖树里没有任何 GPL / AGPL / SSPL / 未知许可证。
