@@ -34,8 +34,11 @@ export interface RenderOptions {
   trail: number
   background: string | null
   circles: 'all' | 'none'
+  /** 项检查：只走前 highlight+1 项的圆链与笔尖，并用 highlightColor 描这一项的圆；null = 全部项 */
+  highlight: number | null
   circleColor: string
   vectorColor: string
+  highlightColor: string
   trailColor: string
   penColor: string
   lineWidth: number
@@ -43,15 +46,17 @@ export interface RenderOptions {
   trailSamples: number
 }
 
-export function renderOptions(width: number, height: number, trail = 0): RenderOptions {
+export function renderOptions(width: number, height: number, trail = 0, highlight: number | null = null): RenderOptions {
   return {
     width,
     height,
     trail,
     background: '#FBFAF7',
     circles: 'all',
+    highlight,
     circleColor: 'rgba(63,107,79,0.22)',
     vectorColor: 'rgba(63,107,79,0.55)',
+    highlightColor: '#C2694F',
     trailColor: '#B5463C',
     penColor: '#243128',
     lineWidth: 1,
@@ -80,12 +85,18 @@ export function renderFrame(target: DrawTarget, scene: Scene, t: number, o: Rend
     target.fillRect(0, 0, o.width, o.height)
   }
 
+  // 项检查：只走到被点选的那一项，后续项既不画圆也不进笔尖位置
+  const upto =
+    o.highlight === null
+      ? scene.terms.length
+      : Math.min(Math.max(0, o.highlight) + 1, scene.terms.length)
+
   // 轨迹从 (t − trail) 解析采样到 t：不累积历史状态，否则纯度无从保证
   if (o.trail > 0) {
     const n = Math.max(2, Math.floor(o.trailSamples))
     target.beginPath()
     for (let j = 0; j <= n; j++) {
-      const p = penAt(scene, t - o.trail * (1 - j / n))
+      const p = penAt(scene, t - o.trail * (1 - j / n), upto)
       if (j === 0) target.moveTo(px(p), py(p))
       else target.lineTo(px(p), py(p))
     }
@@ -97,19 +108,22 @@ export function renderFrame(target: DrawTarget, scene: Scene, t: number, o: Rend
   }
 
   if (o.circles === 'all') {
-    const walk = (visit: (from: Four, to: Four, radius: number) => void) => {
-      let pos: Four = scene.center
-      for (const term of scene.terms) {
-        const ang = TWO_PI * term.n * t + term.phase
-        const to: Four = { re: pos.re + term.radius * Math.cos(ang), im: pos.im + term.radius * Math.sin(ang) }
-        visit(pos, to, term.radius)
-        pos = to
-      }
+    // 先走一遍链条得到每个圆心，再分别批处理「圆」与「矢量」两条路径，各 stroke 一次
+    const chain: { at: Four; radius: number }[] = [{ at: scene.center, radius: 0 }]
+    let pos: Four = scene.center
+    for (let i = 0; i < upto; i++) {
+      const term = scene.terms[i]
+      const ang = TWO_PI * term.n * t + term.phase
+      pos = { re: pos.re + term.radius * Math.cos(ang), im: pos.im + term.radius * Math.sin(ang) }
+      chain.push({ at: pos, radius: term.radius })
     }
 
     if (o.circleColor) {
       target.beginPath()
-      walk((from, _to, radius) => target.arc(px(from), py(from), radius * R, 0, TWO_PI))
+      for (let i = 1; i < chain.length; i++) {
+        const link = chain[i]
+        target.arc(px(link.at), py(link.at), link.radius * R, 0, TWO_PI)
+      }
       target.strokeStyle = o.circleColor
       target.lineWidth = o.lineWidth
       target.stroke()
@@ -117,18 +131,27 @@ export function renderFrame(target: DrawTarget, scene: Scene, t: number, o: Rend
 
     if (o.vectorColor) {
       target.beginPath()
-      walk((from, to) => {
-        target.moveTo(px(from), py(from))
-        target.lineTo(px(to), py(to))
-      })
+      for (let i = 0; i < chain.length - 1; i++) {
+        target.moveTo(px(chain[i].at), py(chain[i].at))
+        target.lineTo(px(chain[i + 1].at), py(chain[i + 1].at))
+      }
       target.strokeStyle = o.vectorColor
       target.lineWidth = o.lineWidth
       target.lineCap = 'round'
       target.stroke()
     }
+
+    if (o.highlight !== null && o.highlightColor && chain.length > 1) {
+      const tip = chain[chain.length - 1]
+      target.beginPath()
+      target.arc(px(tip.at), py(tip.at), tip.radius * R, 0, TWO_PI)
+      target.strokeStyle = o.highlightColor
+      target.lineWidth = o.lineWidth * 2
+      target.stroke()
+    }
   }
 
-  const pen = penAt(scene, t)
+  const pen = penAt(scene, t, upto)
   target.beginPath()
   target.arc(px(pen), py(pen), o.penRadius, 0, TWO_PI)
   target.fillStyle = o.penColor

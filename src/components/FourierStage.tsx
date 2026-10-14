@@ -16,10 +16,21 @@ export function buildDemoScene(id: FormulaId, k: number): Scene {
  * 画布即渲染目标：按设备像素出图（renderFrame 的坐标契约就是设备像素），不做 scale。
  * rAF 时钟只存在于这一层，renderFrame 本身保持纯函数——这是导出与预览一致的前提。
  */
-export function FourierStage({ scene, trail, playing }: { scene: Scene; trail: number; playing: boolean }) {
+export function FourierStage({
+  scene,
+  trail,
+  playing,
+  highlight = null,
+}: {
+  scene: Scene
+  trail: number
+  playing: boolean
+  /** 项检查：只画前 highlight+1 项的圆链 */
+  highlight?: number | null
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const live = useRef({ scene, trail, playing })
-  live.current = { scene, trail, playing }
+  const live = useRef({ scene, trail, playing, highlight })
+  live.current = { scene, trail, playing, highlight }
   const clock = useRef(0)
 
   useEffect(() => {
@@ -46,7 +57,12 @@ export function FourierStage({ scene, trail, playing }: { scene: Scene; trail: n
         if (live.current.playing) clock.current = (clock.current + dt) % 1
       }
       last = now
-      renderFrame(target, live.current.scene, clock.current, renderOptions(canvas.width, canvas.height, live.current.trail))
+      renderFrame(
+        target,
+        live.current.scene,
+        clock.current,
+        renderOptions(canvas.width, canvas.height, live.current.trail, live.current.highlight),
+      )
       raf = requestAnimationFrame(loop)
     }
 

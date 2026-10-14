@@ -49,12 +49,17 @@ export function buildScene(source: FourierAsset | readonly Coefficient[], theta:
   return { center, terms: active, viewScale: 0.8 / Math.max(sum, 1e-9), K, M: coeffs.length }
 }
 
-/** 笔尖位置：pos(t) = c_0 + Σ |c_n| · e^{i(2π n t + φ_n)}。t 可越界，内部取模 */
-export function penAt(scene: Scene, t: number): Four {
+/**
+ * 笔尖位置：pos(t) = c_0 + Σ |c_n| · e^{i(2π n t + φ_n)}。t 可越界，内部取模。
+ * upto 截断到前 upto 项，用于「项检查」模式（只跟到被点选的那一项）。
+ */
+export function penAt(scene: Scene, t: number, upto = scene.terms.length): Four {
   const tt = wrap01(t)
+  const n = Math.min(Math.max(0, upto), scene.terms.length)
   let x = scene.center.re
   let y = scene.center.im
-  for (const term of scene.terms) {
+  for (let i = 0; i < n; i++) {
+    const term = scene.terms[i]
     const ang = TWO_PI * term.n * tt + term.phase
     x += term.radius * Math.cos(ang)
     y += term.radius * Math.sin(ang)

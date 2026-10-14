@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { defaultTheta, type Coefficient, type Theta } from '../types.js'
 import { buildScene, penAt } from '../epicycle.js'
-import { renderFrame, renderOptions, type DrawTarget } from '../renderer.js'
+import { renderFrame, renderOptions, type DrawTarget, type RenderOptions } from '../renderer.js'
 
 type Op = [string, ...unknown[]]
 
@@ -177,6 +177,90 @@ describe('V-6 渲染纯度', () => {
   })
 })
 
+describe('项检查（highlight）', () => {
+  const option = (highlight: number | null) => ({ ...renderOptions(640, 480, 0), highlight })
+
+  it('highlight=1：只走前 2 项的圆链与矢量，并把这一项的圆描一遍', () => {
+    const { target, ops } = makeTarget()
+    renderFrame(target, SCENE, 0.1, option(1))
+    expect(COUNT(ops, 'arc')).toBe(2 + 1 + 1) // 2 个圆 + 高亮圆 + 笔尖
+    expect(COUNT(ops, 'moveTo')).toBe(2)
+    expect(COUNT(ops, 'lineTo')).toBe(2)
+    expect(COUNT(ops, 'stroke')).toBe(3) // 圆、矢量、高亮
+    expect(COUNT(ops, 'fill')).toBe(1)
+
+    const widths = ops.filter((op) => op[0] === 'set' && op[1] === 'lineWidth').map((op) => op[2])
+    expect(widths).toEqual([1, 1, 2])
+    const styles = ops.filter((op) => op[0] === 'set' && op[1] === 'strokeStyle').map((op) => op[2])
+    expect(styles).toEqual(['rgba(63,107,79,0.22)', 'rgba(63,107,79,0.55)', '#C2694F'])
+  })
+
+  it('highlight=0：只剩第一个圆', () => {
+    const { target, ops } = makeTarget()
+    renderFrame(target, SCENE, 0.1, option(0))
+    expect(COUNT(ops, 'arc')).toBe(1 + 1 + 1)
+    expect(COUNT(ops, 'moveTo')).toBe(1)
+    expect(COUNT(ops, 'lineTo')).toBe(1)
+  })
+
+  it('越界的下标收敛到边界：过大的走满，负数收敛到第 0 项', () => {
+    const big = makeTarget()
+    renderFrame(big.target, SCENE, 0.1, { ...renderOptions(640, 480, 0), highlight: 99 })
+    const baseline = makeTarget()
+    renderFrame(baseline.target, SCENE, 0.1, renderOptions(640, 480, 0))
+    // 圆链与矢量与未检查时一致，只多描了一次高亮圆
+    expect(COUNT(big.ops, 'arc')).toBe(COUNT(baseline.ops, 'arc') + 1)
+    expect(COUNT(big.ops, 'moveTo')).toBe(COUNT(baseline.ops, 'moveTo'))
+
+    const negative = makeTarget()
+    renderFrame(negative.target, SCENE, 0.1, { ...renderOptions(640, 480, 0), highlight: -3 })
+    const first = makeTarget()
+    renderFrame(first.target, SCENE, 0.1, { ...renderOptions(640, 480, 0), highlight: 0 })
+    sameFrame(negative.ops, first.ops, '负下标')
+  })
+
+  it('笔尖与轨迹同样只走到被点选的项', () => {
+    const o: RenderOptions = { ...renderOptions(300, 300, 0.5), circles: 'none', highlight: 1, trailSamples: 40 }
+    const { target, ops } = makeTarget()
+    renderFrame(target, SCENE, 0.2, o)
+
+    const R = Math.min(o.width, o.height) * 0.5 * SCENE.viewScale
+    const segs = ops.filter((op) => op[0] === 'moveTo' || op[0] === 'lineTo') as [string, number, number][]
+    expect(segs.length).toBe(41)
+    for (let j = 0; j <= 40; j++) {
+      const p = penAt(SCENE, 0.2 - 0.5 * (1 - j / 40), 2)
+      expect(segs[j][1], `轨迹点 ${j} x`).toBeCloseTo(o.width / 2 + p.re * R, 10)
+      expect(segs[j][2], `轨迹点 ${j} y`).toBeCloseTo(o.height / 2 - p.im * R, 10)
+    }
+
+    // 截断确实改变了笔尖：全链条的位置不同
+    expect(penAt(SCENE, 0.2, 2)).not.toEqual(penAt(SCENE, 0.2))
+  })
+
+  it('空场景加 highlight 不崩溃，只剩笔尖', () => {
+    const empty = buildScene([{ n: 0, re: 0.1, im: 0 }], theta())
+    expect(empty.terms).toEqual([])
+    const { target, ops } = makeTarget()
+    renderFrame(target, empty, 0.1, option(0))
+    expect(COUNT(ops, 'arc')).toBe(1) // 只有笔尖，没有圆链也没有高亮圆
+    expect(COUNT(ops, 'moveTo')).toBe(0)
+    expect(COUNT(ops, 'lineTo')).toBe(0)
+    expect(JSON.stringify(ops)).not.toMatch(/NaN|Infinity|undefined/)
+  })
+
+  it('检查模式仍是纯函数且周期严格为 1', () => {
+    const o = option(1)
+    const a = makeTarget()
+    renderFrame(a.target, SCENE, 0.31, o)
+    expect(JSON.stringify(a.ops)).not.toMatch(/NaN|Infinity|undefined/)
+    for (const t of [0.31, 1.31, -0.69]) {
+      const b = makeTarget()
+      renderFrame(b.target, SCENE, t, o)
+      sameFrame(a.ops, b.ops, `t=${t}`)
+    }
+  })
+})
+
 describe('renderOptions', () => {
   it('给出可预期的默认值', () => {
     const o = renderOptions(100, 100)
@@ -184,6 +268,7 @@ describe('renderOptions', () => {
     expect(o.height).toBe(100)
     expect(o.trail).toBe(0)
     expect(o.circles).toBe('all')
+    expect(o.highlight).toBe(null)
     expect(o.background).toBe('#FBFAF7')
     expect(o.trailSamples).toBeGreaterThan(0)
     expect(o.penRadius).toBeGreaterThan(0)

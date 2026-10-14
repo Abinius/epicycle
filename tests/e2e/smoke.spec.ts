@@ -23,6 +23,51 @@ test('首页渲染品牌与画布，且动画正在绘制', async ({ page }) => 
   await expect.poll(() => paintedPixels(page), { timeout: 8000 }).toBeGreaterThan(200)
 })
 
+test('公式与系数表随形状和 K 同步，点项只画到该项', async ({ page }) => {
+  const errors: string[] = []
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') errors.push(msg.text())
+  })
+  page.on('pageerror', (err) => errors.push(err.message))
+
+  await page.goto('/')
+
+  // KaTeX 真的排上了，不是懒加载的占位块
+  const formula = page.getByTestId('formula')
+  const panel = page.getByLabel('傅里叶公式')
+  await expect(panel).toBeVisible()
+  await expect(formula.locator('.katex')).not.toHaveCount(0)
+
+  const rows = page.getByTestId('coeff-row')
+  await expect(rows.first()).toBeVisible()
+  // 代入式固定展开到 8 项：常数项 + 8 项，共 9 个可点片段
+  await expect(formula.locator('button')).toHaveCount(9)
+
+  // 点一项：圆链截到该项，画布仍在绘制；再点一次恢复
+  await rows.nth(1).click()
+  await expect(rows.nth(1)).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(() => paintedPixels(page), { timeout: 8000 }).toBeGreaterThan(30)
+  await rows.nth(1).click()
+  await expect(rows.nth(1)).toHaveAttribute('aria-pressed', 'false')
+
+  // 心形带限于 |n| ≤ 4，只有 8 项；正方形宽带，同样的 K 下项数立刻不同
+  const heartRows = await rows.count()
+  await page.getByRole('combobox', { name: '形状' }).selectOption('square')
+  await expect(rows).not.toHaveCount(heartRows)
+  // 代入式固定截断在 9 个可点片段（常数项 + 8 项），不随项数膨胀
+  await expect(formula.locator('button')).toHaveCount(9)
+
+  // 改 K：系数表与公式数值同步变化
+  const panelAt64 = await panel.innerText()
+  const rowsAt64 = await rows.count()
+  const slider = page.getByRole('slider', { name: '项数 K' })
+  await slider.fill('128')
+  await expect(rows).not.toHaveCount(rowsAt64)
+  await expect.poll(() => panel.innerText()).not.toBe(panelAt64)
+
+  expect(errors).toEqual([])
+})
+
 test('改项数、换形状、暂停播放：画布继续绘制且无报错', async ({ page }) => {
   const errors: string[] = []
   page.on('console', (msg) => {
@@ -36,18 +81,14 @@ test('改项数、换形状、暂停播放：画布继续绘制且无报错', as
 
   // 心形解析上带限于 |n| ≤ 4：K 从 64 拉到 256，实际参与项一个不多
   const heartTerms = await page.getByTestId('terms').innerText()
-  await slider.evaluate((el) => {
-    const input = el as HTMLInputElement
-    input.value = '256'
-    input.dispatchEvent(new Event('input', { bubbles: true }))
-  })
+  await slider.fill('256')
   await expect(slider).toHaveValue('256')
   await expect(page.getByTestId('terms')).toHaveText(heartTerms)
 
   // 正方形频谱宽带，同样的 K 立刻改变实际参与项
   await page.getByRole('combobox', { name: '形状' }).selectOption('square')
   await expect(page.getByTestId('shape-name')).toContainText('正方形')
-  await expect(page.getByTestId('terms')).not.toHaveText(heartTerms)
+  await expect(page.getByTestId('terms')).toHaveText('256 / 1023')
   await expect.poll(() => paintedPixels(page), { timeout: 8000 }).toBeGreaterThan(200)
 
   await page.getByRole('button', { name: '暂停' }).click()

@@ -1,8 +1,22 @@
-import { useMemo, useState } from 'react'
+import { Suspense, lazy, useMemo, useState } from 'react'
 import { FourierStage, buildDemoScene } from './components/FourierStage.js'
 import { formulaNames, formulas, type FormulaId } from './core/formulas.js'
 
+// KaTeX 随本 chunk 一起加载，不进首屏；懒加载期间显示占位块
+const FormulaPanel = lazy(() => import('./components/FormulaPanel.js'))
+
 const IDS = Object.keys(formulas) as FormulaId[]
+
+function PanelSkeleton() {
+  return (
+    <div aria-hidden className="border-t border-hairline pt-4">
+      <div className="h-3 w-16 rounded bg-mist/10" />
+      <div className="mt-3 h-5 w-full rounded bg-mist/10" />
+      <div className="mt-2 h-7 w-full rounded bg-mist/10" />
+      <div className="mt-3 h-28 w-full rounded bg-mist/10" />
+    </div>
+  )
+}
 
 function Range({
   label,
@@ -47,8 +61,12 @@ export default function App() {
   const [k, setK] = useState(64)
   const [trail, setTrail] = useState(0.35)
   const [playing, setPlaying] = useState(true)
+  const [picked, setPicked] = useState<number | null>(null)
 
   const scene = useMemo(() => buildDemoScene(id, k), [id, k])
+  // 换了形状或 K 之后旧下标会指向另一项，越界就不画
+  const highlight = picked !== null && picked < scene.terms.length ? picked : null
+  const pick = (index: number | null) => setPicked((cur) => (index === null ? null : cur === index ? null : index))
 
   return (
     <div className="flex h-dvh flex-col">
@@ -58,9 +76,12 @@ export default function App() {
         <span className="ml-auto hidden text-xs text-mist/40 sm:block">任何闭合曲线，都是一串同步旋转的圆</span>
       </header>
 
-      <main className="grid min-h-0 flex-1 gap-4 p-4 md:grid-cols-[minmax(0,1fr)_272px]">
-        <section aria-label="渲染画布" className="relative min-h-0 overflow-hidden rounded-lg border border-hairline bg-paper">
-          <FourierStage scene={scene} trail={trail} playing={playing} />
+      <main className="grid min-h-0 flex-1 gap-4 p-4 md:grid-cols-[minmax(0,1fr)_344px]">
+        <section
+          aria-label="渲染画布"
+          className="relative min-h-72 min-w-0 overflow-hidden rounded-lg border border-hairline bg-paper"
+        >
+          <FourierStage scene={scene} trail={trail} playing={playing} highlight={highlight} />
         </section>
 
         <aside className="flex min-h-0 flex-col gap-5 overflow-y-auto rounded-lg border border-hairline p-4">
@@ -91,6 +112,10 @@ export default function App() {
           />
 
           <Range label="轨迹比例" value={trail} min={0} max={1} step={0.05} onChange={(v) => setTrail(Number(v.toFixed(2)))} />
+
+          <Suspense fallback={<PanelSkeleton />}>
+            <FormulaPanel scene={scene} highlight={highlight} onSelect={pick} />
+          </Suspense>
 
           <div className="flex items-center gap-3 border-t border-hairline pt-4 text-sm">
             <button
