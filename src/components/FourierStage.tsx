@@ -1,16 +1,6 @@
 import { useEffect, useRef } from 'react'
-import { dft } from '../core/dft.js'
-import { buildScene } from '../core/epicycle.js'
-import { formulas, type FormulaId } from '../core/formulas.js'
 import { renderFrame, renderOptions, type DrawTarget } from '../core/renderer.js'
-import { defaultTheta, type Scene } from '../core/types.js'
-
-const SAMPLES = 1024
-
-/** 内置公式 → 可动画场景（M1 起换成采样器 / 资产库，接口不变） */
-export function buildDemoScene(id: FormulaId, k: number): Scene {
-  return buildScene(dft(formulas[id](SAMPLES).points, SAMPLES), { ...defaultTheta, K: k })
-}
+import type { Scene } from '../core/types.js'
 
 /**
  * 画布即渲染目标：按设备像素出图（renderFrame 的坐标契约就是设备像素），不做 scale。

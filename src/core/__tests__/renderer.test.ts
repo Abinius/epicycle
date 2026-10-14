@@ -163,7 +163,7 @@ describe('V-6 渲染纯度', () => {
     expect(tiny.ops.filter((op: Op) => op[0] === 'moveTo' || op[0] === 'lineTo').length).toBe(3)
   })
 
-  it('笔尖位置来自 penAt，并经过 px/py 映射', () => {
+  it('笔尖位置来自 penAt，并经过 px/py 映射（以质心为中心）', () => {
     const o = renderOptions(400, 300, 0)
     const { target, ops } = makeTarget()
     renderFrame(target, SCENE, 0.37, o)
@@ -171,9 +171,30 @@ describe('V-6 渲染纯度', () => {
     const [, x, y, r] = arcs[arcs.length - 1]
     const p = penAt(SCENE, 0.37)
     const R = Math.min(o.width, o.height) * 0.5 * SCENE.viewScale
-    expect(x).toBe(o.width / 2 + p.re * R)
-    expect(y).toBe(o.height / 2 - p.im * R)
+    expect(x).toBe(o.width / 2 + (p.re - SCENE.center.re) * R)
+    expect(y).toBe(o.height / 2 - (p.im - SCENE.center.im) * R)
     expect(r).toBe(o.penRadius)
+  })
+
+  it('质心偏得再远，图形也落在画布内', () => {
+    // c_0 是形状自己的位置（上传的 SVG 几乎都不在原点）。以原点为中心时，
+    // viewScale 的「笔尖不出单位半径」保证会失效，图形被推出画布。
+    const off: Coefficient[] = [
+      { n: 0, re: 30, im: -20 },
+      { n: 1, re: 1, im: 0 },
+      { n: -1, re: 1, im: 0 },
+    ]
+    const o = renderOptions(400, 300, 0.5)
+    const { target, ops } = makeTarget()
+    renderFrame(target, buildScene(off, theta({ K: 4 })), 0.13, o)
+    // 一根柱都不该画到「质心为中心、0.8 单位半径」之外
+    const limit = Math.min(o.width, o.height) * 0.5 * 0.8 + 1e-9
+    const drawn = ops.filter((op) => op[0] === 'moveTo' || op[0] === 'lineTo' || op[0] === 'arc')
+    expect(drawn.length).toBeGreaterThan(0)
+    for (const op of drawn) {
+      expect(Math.abs((op[1] as number) - o.width / 2), `${op[0]} x`).toBeLessThanOrEqual(limit)
+      expect(Math.abs((op[2] as number) - o.height / 2), `${op[0]} y`).toBeLessThanOrEqual(limit)
+    }
   })
 })
 
@@ -229,8 +250,8 @@ describe('项检查（highlight）', () => {
     expect(segs.length).toBe(41)
     for (let j = 0; j <= 40; j++) {
       const p = penAt(SCENE, 0.2 - 0.5 * (1 - j / 40), 2)
-      expect(segs[j][1], `轨迹点 ${j} x`).toBeCloseTo(o.width / 2 + p.re * R, 10)
-      expect(segs[j][2], `轨迹点 ${j} y`).toBeCloseTo(o.height / 2 - p.im * R, 10)
+      expect(segs[j][1], `轨迹点 ${j} x`).toBeCloseTo(o.width / 2 + (p.re - SCENE.center.re) * R, 10)
+      expect(segs[j][2], `轨迹点 ${j} y`).toBeCloseTo(o.height / 2 - (p.im - SCENE.center.im) * R, 10)
     }
 
     // 截断确实改变了笔尖：全链条的位置不同

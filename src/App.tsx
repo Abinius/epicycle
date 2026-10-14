@@ -1,15 +1,15 @@
 import { Suspense, lazy, useMemo, useState } from 'react'
-import { FourierStage, buildDemoScene } from './components/FourierStage.js'
+import { FourierStage } from './components/FourierStage.js'
 import { SourcePanel, type SourceOptions } from './components/SourcePanel.js'
+import { SpectrumPanel } from './components/SpectrumPanel.js'
 import { buildScene } from './core/epicycle.js'
-import { formulaNames, formulas, type FormulaId } from './core/formulas.js'
+import { PRESET_IDS, PRESET_NAMES, presetCoeffs, type PresetId } from './core/presets.js'
 import { readSvg } from './core/source.js'
+import { spectrumOf } from './core/spectrum.js'
 import { defaultTheta } from './core/types.js'
 
 // KaTeX 随本 chunk 一起加载，不进首屏；懒加载期间显示占位块
 const FormulaPanel = lazy(() => import('./components/FormulaPanel.js'))
-
-const IDS = Object.keys(formulas) as FormulaId[]
 
 interface Upload {
   name: string
@@ -67,7 +67,7 @@ function Range({
 }
 
 export default function App() {
-  const [id, setId] = useState<FormulaId>('heart')
+  const [preset, setPreset] = useState<PresetId>('heart')
   const [k, setK] = useState(64)
   const [trail, setTrail] = useState(0.35)
   const [playing, setPlaying] = useState(true)
@@ -84,16 +84,16 @@ export default function App() {
     [upload, opts, k],
   )
 
-  const scene = useMemo(
-    () => (read?.ok && read.coeffs ? buildScene(read.coeffs, { ...defaultTheta, K: k }) : buildDemoScene(id, k)),
-    [read, id, k],
-  )
+  // 系数只算一次：上传优先，否则取预置。场景与频谱都从这份系数派生
+  const coeffs = useMemo(() => (read?.ok && read.coeffs ? read.coeffs : presetCoeffs(preset)), [read, preset])
+  const scene = useMemo(() => buildScene(coeffs, { ...defaultTheta, K: k }), [coeffs, k])
+  const spectrum = useMemo(() => spectrumOf(coeffs, scene), [coeffs, scene])
   // 换了形状或 K 之后旧下标会指向另一项，越界就不画
   const highlight = picked !== null && picked < scene.terms.length ? picked : null
   const pick = (index: number | null) => setPicked((cur) => (index === null ? null : cur === index ? null : index))
 
-  const usePreset = (next: FormulaId) => {
-    setId(next)
+  const usePreset = (next: PresetId) => {
+    setPreset(next)
     setUpload(null)
     setPicked(null)
   }
@@ -104,7 +104,7 @@ export default function App() {
     setPicked(null)
   }
 
-  const sourceName = read?.ok ? upload?.name : formulaNames[id]
+  const sourceName = read?.ok ? upload?.name : PRESET_NAMES[preset]
 
   return (
     <div className="flex h-dvh flex-col">
@@ -147,13 +147,13 @@ export default function App() {
             <span className="text-mist/70">预置形状</span>
             <select
               aria-label="形状"
-              value={id}
-              onChange={(e) => usePreset(e.target.value as FormulaId)}
+              value={preset}
+              onChange={(e) => usePreset(e.target.value as PresetId)}
               className="border border-hairline bg-ink2 px-2 py-1.5 text-sm"
             >
-              {IDS.map((x) => (
+              {PRESET_IDS.map((x) => (
                 <option key={x} value={x}>
-                  {formulaNames[x]}
+                  {PRESET_NAMES[x]}
                 </option>
               ))}
             </select>
@@ -170,6 +170,8 @@ export default function App() {
           />
 
           <Range label="轨迹比例" value={trail} min={0} max={1} step={0.05} onChange={(v) => setTrail(Number(v.toFixed(2)))} />
+
+          <SpectrumPanel spectrum={spectrum} highlight={highlight} onSelect={pick} />
 
           <Suspense fallback={<PanelSkeleton />}>
             <FormulaPanel scene={scene} highlight={highlight} onSelect={pick} />

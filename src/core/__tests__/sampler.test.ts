@@ -137,6 +137,27 @@ describe('sample：等弧长重采样', () => {
     expect(r.closed).toBe(true)
   })
 
+  it('镜像回扫按点倒序：翻转的是点对，不是整个交错数组', () => {
+    // 两点折线是这条路径的盲区——只有一段时把整条数组 reverse 也不会出错，
+    // 所以要拿三点以上的折线来钉：多点时 x/y 会被整段互换
+    const r = sample('M 0 0 L 2 0 L 2 2', { N: 8, close_mode: 'mirror' })
+    // y 翻转会把 0 变成 -0，而 toEqual 区分两者，先归一
+    const at = (k: number) => [r.points[2 * k] + 0, r.points[2 * k + 1] + 0]
+    expect(Array.from({ length: 8 }, (_, k) => at(k))).toEqual([
+      [0, 0],
+      [1, 0],
+      [2, 0],
+      [2, -1],
+      [2, -2],
+      [2, -1],
+      [2, 0],
+      [1, 0],
+    ])
+    // 去路与回路逐点重合（末点转回起点，闭合段长度为 0）
+    for (let k = 0; k < 8; k++) expect(at((8 - k) % 8)).toEqual(at(k))
+    expect(r.closed).toBe(true)
+  })
+
   it('gap 是首尾距离相对包围盒长边的比值', () => {
     expect(sample('M 0 0 L 4 0', { N: 16, close_mode: 'join' }).gap).toBeCloseTo(1, 12)
     expect(sample(CIRCLE, OPTS).gap).toBeLessThan(1e-6)

@@ -13,6 +13,33 @@ function paintedPixels(page: Page) {
   })
 }
 
+/** 画出像素的重心，按画布尺寸归一（0.5 即正中）。图形跑出画布时重心会明显偏移 */
+function paintedCenter(page: Page) {
+  return page.locator('[data-testid="stage"]').evaluate((el) => {
+    const canvas = el as HTMLCanvasElement
+    const { width, height } = canvas
+    const data = canvas.getContext('2d')!.getImageData(0, 0, width, height).data
+    let n = 0
+    let sx = 0
+    let sy = 0
+    for (let i = 0; i < data.length; i += 4) {
+      if (Math.abs(data[i] - 251) + Math.abs(data[i + 1] - 250) + Math.abs(data[i + 2] - 247) <= 24) continue
+      const p = i / 4
+      sx += p % width
+      sy += Math.floor(p / width)
+      n++
+    }
+    return n === 0 ? null : { x: sx / n / width, y: sy / n / height }
+  })
+}
+
+/** 暂停并拉满轨迹：图形完整可见，便于量重心 */
+async function freeze(page: Page) {
+  await page.getByRole('button', { name: '暂停' }).click()
+  await page.getByRole('slider', { name: '轨迹比例' }).fill('1')
+  await page.waitForTimeout(150)
+}
+
 test('首页渲染品牌与画布，且动画正在绘制', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { name: '傅里叶画板' })).toBeVisible()
@@ -94,6 +121,15 @@ test('上传 SVG：出动画、公式同步换源，坏文件给出诊断', asyn
   await page.getByLabel('闭合方式').selectOption('mirror')
   await expect(page.getByLabel('预检诊断')).toHaveCount(0)
 
+  // 上传的 SVG 自带坐标框（不在原点），渲染必须按质心居中，否则会被推出画布
+  await freeze(page)
+  const center = await paintedCenter(page)
+  expect(center, '上传的图形没有画出像素').not.toBeNull()
+  expect(center!.x, '上传图形重心 x').toBeGreaterThan(0.3)
+  expect(center!.x, '上传图形重心 x').toBeLessThan(0.7)
+  expect(center!.y, '上传图形重心 y').toBeGreaterThan(0.3)
+  expect(center!.y, '上传图形重心 y').toBeLessThan(0.7)
+
   // 只有 rect 的文件：报「未找到路径数据」，画面回到预置形状
   await input.setInputFiles('tests/e2e/fixtures/nopath.svg')
   await expect(page.getByLabel('预检诊断')).toContainText('未找到路径数据')
@@ -133,6 +169,62 @@ test('改项数、换形状、暂停播放：画布继续绘制且无报错', as
 
   await page.getByRole('button', { name: '暂停' }).click()
   await expect(page.getByRole('button', { name: '播放' })).toBeVisible()
+
+  expect(errors).toEqual([])
+})
+
+test('频谱柱标注参与项并与系数表联动，六个预置都落在画面内', async ({ page }) => {
+  const errors: string[] = []
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') errors.push(msg.text())
+  })
+  page.on('pageerror', (err) => errors.push(err.message))
+
+  await page.goto('/')
+  const chart = page.getByLabel('振幅频谱')
+  const bars = chart.getByTestId('spectrum-bar')
+  const rows = page.getByTestId('coeff-row')
+  const slider = page.getByRole('slider', { name: '项数 K' })
+
+  // 心形带限于 |n| ≤ 4：左右各 4 根柱；幅度最大的 |c_{-1}| 就是系数表第 1 行
+  await expect(chart).toBeVisible()
+  await expect(bars).toHaveCount(8)
+  const negOne = chart.getByRole('button', { name: /频率 n=-1，/ })
+  await negOne.click()
+  await expect(negOne).toHaveAttribute('aria-pressed', 'true')
+  await expect(rows.first()).toHaveAttribute('aria-pressed', 'true')
+  await negOne.click()
+  await expect(rows.first()).toHaveAttribute('aria-pressed', 'false')
+
+  // K=1 时只剩一个频率参与，被截断的频率退成不可点的暗柱
+  await slider.fill('1')
+  await expect(bars).toHaveCount(1)
+  await slider.fill('64')
+  await expect(bars).toHaveCount(8)
+
+  // 六个预置：都出动画、都换掉公式，且图形重心落在画面中部
+  // （渲染以质心为中心，重心跑到边上就说明形状被推出了画布）
+  for (const [id, name] of [
+    ['circle', '圆'],
+    ['square', '正方形'],
+    ['heart', '心形'],
+    ['star', '星形'],
+    ['note', '音符'],
+    ['signature', '签名'],
+  ] as const) {
+    await page.getByRole('combobox', { name: '形状' }).selectOption(id)
+    await expect(page.getByTestId('shape-name')).toContainText(name)
+    await expect(page.getByTestId('formula').locator('.katex')).not.toHaveCount(0)
+    await freeze(page)
+    await expect.poll(() => paintedPixels(page), { timeout: 8000 }).toBeGreaterThan(200)
+    const center = await paintedCenter(page)
+    expect(center, `${id} 没有画出像素`).not.toBeNull()
+    expect(center!.x, `${id} 重心 x`).toBeGreaterThan(0.3)
+    expect(center!.x, `${id} 重心 x`).toBeLessThan(0.7)
+    expect(center!.y, `${id} 重心 y`).toBeGreaterThan(0.3)
+    expect(center!.y, `${id} 重心 y`).toBeLessThan(0.7)
+    await page.getByRole('button', { name: '播放' }).click()
+  }
 
   expect(errors).toEqual([])
 })

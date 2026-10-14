@@ -301,8 +301,11 @@ export function assemble(parts: readonly Flattened[], opts: SampleOptions): Samp
   const gap = n >= 2 ? Math.hypot(pts[0] - pts[2 * n - 2], pts[1] - pts[2 * n - 1]) : 0
   const endsMeet = gap < 1e-6
   if (!endsMeet && opts.close_mode === 'mirror') {
-    // 笔迹「画过去再画回来」：中间点只留一次，去重后自然闭合
-    pts = dedupe([...pts, ...pts.slice(0, pts.length - 2).reverse()])
+    // 笔迹「画过去再画回来」：按**点**倒序接回起点（末点重复一次由 dedupe 收掉）。
+    // 注意必须成对搬运——pts 是交错的扁平数组，整个数组 reverse 会把 x/y 互换。
+    const back: number[] = []
+    for (let i = pts.length - 2; i >= 0; i -= 2) back.push(pts[i], pts[i + 1])
+    pts = dedupe([...pts, ...back])
   }
 
   const out = resample(pts, opts.N)

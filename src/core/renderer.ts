@@ -74,8 +74,11 @@ export function renderFrame(target: DrawTarget, scene: Scene, t: number, o: Rend
   const cx = o.width / 2
   const cy = o.height / 2
   const R = Math.min(o.width, o.height) * 0.5 * scene.viewScale
-  const px = (f: Four) => cx + f.re * R
-  const py = (f: Four) => cy - f.im * R // 数学 y 向上，画布 y 向下
+  // 以形状质心 c_0（常数项）为画布中心：viewScale = 0.8/Σ|c_n| 的「笔尖不出单位半径」
+  // 保证只在以质心为中心时成立——以原点为中心时，笔尖最远可达 |c_0| + Σ|c_n|，
+  // 任何不在原点附近的形状（上传的 SVG、自带坐标框的预置）都会被推出画布。
+  const px = (f: Four) => cx + (f.re - scene.center.re) * R
+  const py = (f: Four) => cy - (f.im - scene.center.im) * R // 数学 y 向上，画布 y 向下
 
   target.save()
 
