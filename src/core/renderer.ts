@@ -3,8 +3,10 @@ import { TWO_PI } from './complex.js'
 import { penAt } from './epicycle.js'
 
 /**
- * 渲染只依赖这个窄接口，不用 Canvas 类型 —— 这样在 Node 里能用一个
- * 录制桩做纯度测试（V-6），同时真正的 CanvasRenderingContext2D 也能直接赋值进来。
+ * 渲染只依赖这个窄接口，不用 Canvas 类型 —— 这样在 Node 里能用一个录制桩做
+ * 纯度测试（V-6）。注意 CanvasRenderingContext2D 的 fillStyle/strokeStyle 是
+ * `string | CanvasGradient | CanvasPattern`，与这里的 string 不完全同构，
+ * 边界处收窄一次即可（本渲染器只写纯色字符串）。
  */
 export interface DrawTarget {
   fillStyle: string

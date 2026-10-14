@@ -65,13 +65,11 @@ export function dft(z: Float64Array, N: number): Coefficient[] {
   }
 
   const M = N >> 1
-  const out: Coefficient[] = new Array(2 * M - 1)
-  let idx = 0
+  const out: Coefficient[] = [{ n: 0, re: re[0] / N, im: im[0] / N }]
   // 注意：输入 z 是交错数组（z[2k]），但 FFT 就地写回的是 re[k]/im[k]，输出索引不乘 2
-  out[idx++] = { n: 0, re: re[0] / N, im: im[0] / N }
   for (let n = 1; n < M; n++) {
-    out[idx++] = { n, re: re[n] / N, im: im[n] / N }
-    out[idx++] = { n: -n, re: re[N - n] / N, im: im[N - n] / N }
+    out.push({ n, re: re[n] / N, im: im[n] / N })
+    out.push({ n: -n, re: re[N - n] / N, im: im[N - n] / N })
   }
   return out
 }

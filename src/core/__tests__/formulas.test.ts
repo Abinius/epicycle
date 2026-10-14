@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { circle, formulas, heart, square, star } from '../formulas.js'
+import { circle, formulaNames, formulas, heart, square, star } from '../formulas.js'
 
 function closeBbox(actual: readonly number[], expected: readonly number[]) {
   expect(actual.length).toBe(4)
@@ -7,13 +7,14 @@ function closeBbox(actual: readonly number[], expected: readonly number[]) {
 }
 
 describe('生成器接口', () => {
-  it('四个生成器：id 对应、点数为 2N、bbox 有序', () => {
+  it('四个生成器：id 对应、点数为 2N、bbox 有序、中文名与注册表一致', () => {
     expect(Object.keys(formulas)).toEqual(['circle', 'square', 'heart', 'star'])
     for (const [id, fn] of Object.entries(formulas)) {
+      expect(formulaNames[id as keyof typeof formulaNames], id).toBeTruthy()
       for (const N of [16, 512]) {
         const s = fn(N)
         expect(s.id, `${id} N=${N}`).toBe(id)
-        expect(s.name.length, `${id}`).toBeGreaterThan(0)
+        expect(s.name, id).toBe(formulaNames[id as keyof typeof formulaNames])
         expect(s.points.length, `${id} N=${N}`).toBe(2 * N)
         expect(s.bbox[0]).toBeLessThanOrEqual(s.bbox[2])
         expect(s.bbox[1]).toBeLessThanOrEqual(s.bbox[3])

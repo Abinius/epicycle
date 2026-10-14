@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: 类型 / Lint / 数值样张 / 构建体积 / E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: 安装
+        run: npm ci
+
+      # 门禁顺序按快→慢排（开发计划 §4）
+      - name: 类型检查
+        run: npm run typecheck
+
+      - name: Lint（含 core/ 禁浏览器 API 的架构约束）
+        run: npm run lint
+
+      - name: 单元测试 + 数值黄金样张 V-1…V-6
+        run: npm run coverage
+
+      - name: 构建 + 首屏体积门禁（gzip ≤ 300 KB）
+        run: |
+          npm run build
+          node -e "const fs=require('fs'),{gzipSync}=require('zlib');let b=0;for(const f of fs.readdirSync('dist/assets')){if(!/\.(js|css)$/.test(f))continue;b+=gzipSync(fs.readFileSync('dist/assets/'+f)).length}const kb=b/1024;console.log('首屏 gzip: '+kb.toFixed(1)+' KB');if(kb>300)process.exit(1)"
+
+      - name: E2E 冒烟（Playwright）
+        run: |
+          npx playwright install --with-deps chromium
+          npx playwright test

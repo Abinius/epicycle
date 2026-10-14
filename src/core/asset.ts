@@ -124,10 +124,14 @@ export function toShortCode(coeffs: readonly Coefficient[]): string {
 export function fromShortCode(code: string): Coefficient[] {
   const bytes = base64UrlDecode(code)
   const n = Math.floor(bytes.length / 6)
-  const out: Coefficient[] = new Array(n)
+  const out: Coefficient[] = []
   for (let i = 0; i < n; i++) {
     const o = i * 6
-    out[i] = { n: getInt16(bytes, o), re: (getInt16(bytes, o + 2) / 32767) * Q_RANGE, im: (getInt16(bytes, o + 4) / 32767) * Q_RANGE }
+    out.push({
+      n: getInt16(bytes, o),
+      re: (getInt16(bytes, o + 2) / 32767) * Q_RANGE,
+      im: (getInt16(bytes, o + 4) / 32767) * Q_RANGE,
+    })
   }
   return out
 }

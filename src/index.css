@@ -1,0 +1,30 @@
+@import 'tailwindcss';
+
+/* 设计令牌：单一出处。UI 只许用这里声明的颜色与字体，不要在组件里写裸色值 */
+@theme {
+  --color-ink: #0e1513;
+  --color-ink2: #16201d;
+  --color-paper: #fbfaf7;
+  --color-mist: #ece9e1;
+  --color-sage: #8fb89c;
+  --color-clay: #c2694f;
+  --color-hairline: rgba(236, 233, 225, 0.14);
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+  --font-serif: ui-serif, 'Noto Serif SC', 'Songti SC', Georgia, serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, 'JetBrains Mono', monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-ink);
+  color: var(--color-mist);
+  -webkit-font-smoothing: antialiased;
+}
