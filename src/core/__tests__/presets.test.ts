@@ -4,7 +4,7 @@ import {
   PRESET_IDS,
   PRESET_N,
   PRESET_NAMES,
-  presetCoeffs,
+  presetOf,
   type PresetId,
 } from '../presets.js'
 import { sample } from '../sampler.js'
@@ -19,7 +19,7 @@ describe('预置清单', () => {
 
   it('每个预置都能出系数：n 不重、全有限、可复现', () => {
     for (const id of PRESET_IDS) {
-      const coeffs = presetCoeffs(id)
+      const coeffs = presetOf(id).coeffs
       // dft 的契约是 2M−1 项，M = N/2，即 N−1 项
       expect(coeffs.length, id).toBe(PRESET_N - 1)
       expect(new Set(coeffs.map((c) => c.n)).size, id).toBe(coeffs.length)
@@ -27,19 +27,34 @@ describe('预置清单', () => {
         expect(Number.isFinite(c.re), id).toBe(true)
         expect(Number.isFinite(c.im), id).toBe(true)
       }
-      expect(presetCoeffs(id), id).toEqual(coeffs)
+      expect(presetOf(id).coeffs, id).toEqual(coeffs)
     }
   })
 
+  it('采样摘要与系数同源：点数、子路径、闭合都对得上', () => {
+    for (const id of PRESET_IDS) {
+      const { coeffs, sample: s } = presetOf(id)
+      expect(s.N, id).toBe(PRESET_N)
+      expect(s.points.length, id).toBe(2 * PRESET_N)
+      expect(s.subpaths, id).toBeGreaterThan(0)
+      expect(s.closed, id).toBe(true)
+      expect(coeffs, id).toHaveLength(PRESET_N - 1)
+    }
+    // 解析生成器没有细分这一步；内建路径有
+    expect(presetOf('heart').sample.subdivide_eps).toBe(0)
+    expect(presetOf('signature').sample.subdivide_eps).toBeGreaterThan(0)
+    expect(presetOf('signature').sample.close_mode).toBe('mirror')
+  })
+
   it('六个预置的系数各不相同', () => {
-    const fingerprint = (id: PresetId) => presetCoeffs(id).map((c) => `${c.n}:${c.re.toFixed(9)}`).join(',')
+    const fingerprint = (id: PresetId) => presetOf(id).coeffs.map((c) => `${c.n}:${c.re.toFixed(9)}`).join(',')
     const all = PRESET_IDS.map(fingerprint)
     expect(new Set(all).size).toBe(PRESET_IDS.length)
   })
 
   it('N 不是 2 的幂就抛错', () => {
-    expect(() => presetCoeffs('circle', 10)).toThrow(/2 的幂/)
-    expect(() => presetCoeffs('note', 10)).toThrow(/2 的幂/)
+    expect(() => presetOf('circle', 10)).toThrow(/2 的幂/)
+    expect(() => presetOf('note', 10)).toThrow(/2 的幂/)
   })
 })
 

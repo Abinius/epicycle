@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildScene } from '../epicycle.js'
-import { presetCoeffs } from '../presets.js'
+import { presetOf } from '../presets.js'
 import { SPECTRUM_MAX_BINS, spectrumOf } from '../spectrum.js'
 import { defaultTheta, type Coefficient, type Scene } from '../types.js'
 
@@ -143,7 +143,7 @@ describe('窗口上限', () => {
       ['heart', 4, 8],
       ['signature', SPECTRUM_MAX_BINS, 1022],
     ] as const) {
-      const coeffs = presetCoeffs(id)
+      const coeffs = presetOf(id).coeffs
       const s = spectrumOf(coeffs, sceneOf(coeffs))
       expect(s.top, id).toBe(top)
       expect(s.frequencies, id).toBe(frequencies)

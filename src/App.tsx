@@ -1,20 +1,37 @@
-import { Suspense, lazy, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
+import { AssetPanel, type Frozen } from './components/AssetPanel.js'
 import { FourierStage } from './components/FourierStage.js'
-import { SourcePanel, type SourceOptions } from './components/SourcePanel.js'
+import { SourcePanel, type SourceOptions, type SourceTab } from './components/SourcePanel.js'
 import { SpectrumPanel } from './components/SpectrumPanel.js'
+import { TermEditor } from './components/TermEditor.js'
+import { ValuePanel } from './components/ValuePanel.js'
+import { boundsOf, createAsset, exportJson, parseAsset } from './core/asset.js'
+import { diagnose, storedCorrupt, type Diagnostic } from './core/diagnostic.js'
 import { buildScene } from './core/epicycle.js'
-import { PRESET_IDS, PRESET_NAMES, presetCoeffs, type PresetId } from './core/presets.js'
-import { readSvg } from './core/source.js'
+import { PRESET_IDS, PRESET_NAMES, presetOf, type PresetId } from './core/presets.js'
 import { spectrumOf } from './core/spectrum.js'
-import { defaultTheta } from './core/types.js'
+import { strokesToPath, type Stroke } from './core/strokes.js'
+import { defaultTheta, type Coefficient, type FourierAsset, type PerNParam, type Theta } from './core/types.js'
+import { useSvgWorker } from './engine/useSvgWorker.js'
+import { deleteAsset, listAssets, saveAsset, storageDiagnostic } from './storage/assets.js'
 
 // KaTeX 随本 chunk 一起加载，不进首屏；懒加载期间显示占位块
 const FormulaPanel = lazy(() => import('./components/FormulaPanel.js'))
 
-interface Upload {
+interface LoadedFile {
   name: string
   text: string
   bytes: number
+}
+
+/** 工作台上的形状：系数 + 冻结一份资产所需的全部旁证 */
+interface Origin {
+  name: string
+  coeffs: Coefficient[]
+  bounds: FourierAsset['bounds']
+  dft_ms: number
+  sampling: FourierAsset['sampling']
+  source: FourierAsset['source']
 }
 
 function PanelSkeleton() {
@@ -28,83 +45,252 @@ function PanelSkeleton() {
   )
 }
 
-function Range({
-  label,
-  value,
-  min,
-  max,
-  step,
-  onChange,
-  hint,
-}: {
-  label: string
-  value: number
-  min: number
-  max: number
-  step: number
-  onChange: (v: number) => void
-  hint?: string
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-baseline justify-between text-sm">
-        <span className="text-mist/70">{label}</span>
-        <span className="font-mono text-xs tabular-nums">{value}</span>
-      </div>
-      <input
-        type="range"
-        aria-label={label}
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="accent-sage"
-      />
-      {hint ? <p className="text-xs leading-relaxed text-mist/35">{hint}</p> : null}
-    </div>
-  )
-}
-
 export default function App() {
   const [preset, setPreset] = useState<PresetId>('heart')
-  const [k, setK] = useState(64)
-  const [trail, setTrail] = useState(0.35)
+  const [theta, setTheta] = useState<Theta>(defaultTheta)
   const [playing, setPlaying] = useState(true)
-  const [picked, setPicked] = useState<number | null>(null)
-  const [upload, setUpload] = useState<Upload | null>(null)
+  // 以频率 n（而非行下标）为锚：编辑把项挤出 terms 后面板仍挂原 n，调高即可恢复
+  const [pickedN, setPickedN] = useState<number | null>(null)
+  const [tab, setTab] = useState<SourceTab>('svg')
+  const [file, setFile] = useState<LoadedFile | null>(null)
+  const [strokes, setStrokes] = useState<Stroke[]>([])
+  const [opened, setOpened] = useState<FourierAsset | null>(null)
   const [opts, setOpts] = useState<SourceOptions>({ N: 1024, close_mode: 'join', longest_only: false })
 
-  // 上传链路的唯一入口：抽路径 → 采样 → DFT → 诊断
-  const read = useMemo(
-    () =>
-      upload
-        ? readSvg(upload.text, { ...opts, K: k, bytes: upload.bytes })
-        : null,
-    [upload, opts, k],
-  )
+  const [assets, setAssets] = useState<FourierAsset[]>([])
+  const [assetDiag, setAssetDiag] = useState<Diagnostic[]>([])
+  // origin 一起存进冻结态：换素材后 origin 是新的对象，引用一比就知道这个冻结态失效了
+  const [frozen, setFrozen] = useState<(Frozen & { origin: Origin }) | null>(null)
+  const [busy, setBusy] = useState(false)
 
-  // 系数只算一次：上传优先，否则取预置。场景与频谱都从这份系数派生
-  const coeffs = useMemo(() => (read?.ok && read.coeffs ? read.coeffs : presetCoeffs(preset)), [read, preset])
-  const scene = useMemo(() => buildScene(coeffs, { ...defaultTheta, K: k }), [coeffs, k])
-  const spectrum = useMemo(() => spectrumOf(coeffs, scene), [coeffs, scene])
-  // 换了形状或 K 之后旧下标会指向另一项，越界就不画
-  const highlight = picked !== null && picked < scene.terms.length ? picked : null
-  const pick = (index: number | null) => setPicked((cur) => (index === null ? null : cur === index ? null : index))
+  const patch = (p: Partial<Theta>) => setTheta((t) => ({ ...t, ...p }))
+  const reset = () => {
+    setTheta(defaultTheta)
+    setPickedN(null)
+  }
+  const onPerN = (n: number, p: Partial<PerNParam>) =>
+    setTheta((t) => {
+      const key = String(n)
+      const cur = t.perN[key] ?? {}
+      const next = { ...cur, ...p }
+      for (const k of Object.keys(next)) if (next[k as keyof PerNParam] === undefined) delete next[k as keyof PerNParam]
+      const perN = { ...t.perN }
+      if (Object.keys(next).length === 0) delete perN[key]
+      else perN[key] = next
+      return { ...t, perN }
+    })
+
+  // ---- 素材 → 系数：上传与手绘共用一条管线，都跑在 Worker 里 ----
+  const activeFile = tab === 'svg' ? file : null
+  const drawPath = useMemo(() => strokesToPath(strokes), [strokes])
+  const shapeText = opened ? null : (activeFile?.text ?? (tab === 'draw' ? drawPath || null : null))
+  const prepared = useSvgWorker(shapeText, opts)
+
+  // diagnose 便宜且依赖 K，留在主线程：拖 K 不再触发采样与 DFT
+  const read = useMemo(() => {
+    if (!prepared || shapeText === null) return null
+    const diagnostics = diagnose({
+      svg: shapeText,
+      bytes: activeFile?.bytes ?? shapeText.length,
+      paths: prepared.paths,
+      sample: prepared.sample,
+      coeffs: prepared.coeffs,
+      K: theta.K,
+    })
+    return {
+      ...prepared,
+      diagnostics,
+      ok: prepared.sample !== null && prepared.coeffs !== null && !diagnostics.some((d) => d.severity === 'error'),
+    }
+  }, [prepared, shapeText, activeFile, theta.K])
+
+  const presetData = useMemo(() => {
+    const t0 = performance.now()
+    const data = presetOf(preset)
+    // 预置没有 Worker，「预置 → 系数」整段都算在这里（解析生成器的耗时几乎全在 DFT）
+    return { ...data, dft_ms: performance.now() - t0 }
+  }, [preset])
+
+  const readOk = read?.ok ?? false
+  const origin = useMemo<Origin>(() => {
+    if (opened) {
+      return {
+        name: opened.name,
+        coeffs: opened.coeffs,
+        bounds: opened.bounds,
+        dft_ms: opened.meta.dft_ms,
+        sampling: opened.sampling,
+        source: opened.source,
+      }
+    }
+    const sample = prepared?.sample
+    if (readOk && sample && prepared?.coeffs) {
+      return {
+        name: activeFile?.name ?? '手绘',
+        coeffs: prepared.coeffs,
+        bounds: boundsOf(prepared.coeffs, sample.points),
+        dft_ms: prepared.dft_ms,
+        sampling: { N: sample.N, closed: sample.closed, close_mode: opts.close_mode, subdivide_eps: sample.tolerance },
+        source: activeFile
+          ? { type: 'svg', file_name: activeFile.name, bytes: activeFile.bytes, subpaths: sample.subpaths }
+          : { type: 'draw', subpaths: sample.subpaths },
+      }
+    }
+    return {
+      name: PRESET_NAMES[preset],
+      coeffs: presetData.coeffs,
+      bounds: boundsOf(presetData.coeffs, presetData.sample.points),
+      dft_ms: presetData.dft_ms,
+      sampling: {
+        N: presetData.sample.N,
+        closed: presetData.sample.closed,
+        close_mode: presetData.sample.close_mode,
+        subdivide_eps: presetData.sample.subdivide_eps,
+      },
+      source: { type: 'preset', preset, subpaths: presetData.sample.subpaths },
+    }
+  }, [opened, readOk, prepared, activeFile, opts.close_mode, preset, presetData])
+
+  const scene = useMemo(() => buildScene(origin.coeffs, theta), [origin, theta])
+  const spectrum = useMemo(() => spectrumOf(origin.coeffs, scene), [origin, scene])
+  // 换形状或参数后旧下标会失配；按 n 反查行号，找不到就不画
+  const highlight =
+    pickedN !== null ? (() => {
+      const i = scene.terms.findIndex((t) => t.n === pickedN)
+      return i === -1 ? null : i
+    })() : null
+  const pick = (index: number | null) => {
+    if (index === null) {
+      setPickedN(null)
+      return
+    }
+    const n = scene.terms[index]?.n
+    if (n === undefined) return
+    setPickedN((cur) => (cur === n ? null : n))
+  }
 
   const usePreset = (next: PresetId) => {
     setPreset(next)
-    setUpload(null)
-    setPicked(null)
+    setFile(null)
+    setStrokes([])
+    setOpened(null)
+    setPickedN(null)
+  }
+  const onTab = (next: SourceTab) => {
+    setTab(next)
+    setOpened(null)
+    setPickedN(null)
+  }
+  const onStrokes = (next: Stroke[]) => {
+    setStrokes(next)
+    setOpened(null)
+    setPickedN(null)
+  }
+  const loadFile = async (f: File) => {
+    const text = await f.text()
+    setFile({ name: f.name, text, bytes: f.size })
+    setTab('svg')
+    setOpened(null)
+    setPickedN(null)
   }
 
-  const loadFile = async (file: File) => {
-    const text = await file.text()
-    setUpload({ name: file.name, text, bytes: file.size })
-    setPicked(null)
+  // ---- 资产库 ----
+  const refresh = useCallback(async () => {
+    try {
+      const { assets: list, corrupt } = await listAssets()
+      setAssets(list)
+      setAssetDiag(corrupt > 0 ? [storedCorrupt(corrupt)] : [])
+    } catch (err) {
+      setAssetDiag([storageDiagnostic(err)])
+    }
+  }, [])
+
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
+
+  const freeze = async () => {
+    const asset = createAsset({
+      name: origin.name,
+      createdAt: new Date().toISOString(),
+      source: origin.source,
+      sampling: origin.sampling,
+      bounds: origin.bounds,
+      coeffs: origin.coeffs,
+      dftMs: origin.dft_ms,
+    })
+    setBusy(true)
+    try {
+      await saveAsset(asset)
+      await refresh()
+      setFrozen({ id: asset.id, name: asset.name, origin })
+    } catch (err) {
+      setAssetDiag([storageDiagnostic(err)])
+    } finally {
+      setBusy(false)
+    }
   }
 
-  const sourceName = read?.ok ? upload?.name : PRESET_NAMES[preset]
+  const openAsset = (a: FourierAsset) => {
+    setOpened(a)
+    setPickedN(null)
+  }
+
+  const downloadAsset = (a: FourierAsset) => {
+    const url = URL.createObjectURL(new Blob([exportJson(a)], { type: 'application/json' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${a.id}.json`
+    link.click()
+    // 立刻撤销会让 Firefox 拿不到内容，等一拍再放
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
+  const importAsset = async (f: File) => {
+    const parsed = parseAsset(await f.text())
+    if (!parsed.ok) {
+      setAssetDiag([parsed.diagnostic])
+      return
+    }
+    setBusy(true)
+    try {
+      await saveAsset(parsed.asset)
+      await refresh()
+      openAsset(parsed.asset)
+    } catch (err) {
+      setAssetDiag([storageDiagnostic(err)])
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const removeAsset = async (a: FourierAsset) => {
+    setBusy(true)
+    try {
+      await deleteAsset(a.id)
+      // 删掉的正是工作台上这份：连它一起撤走，免得画面还挂着一个已经不存在的资产名
+      if (opened?.id === a.id) setOpened(null)
+      await refresh()
+    } catch (err) {
+      setAssetDiag([storageDiagnostic(err)])
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // 打开着的资产本身就是冻结态；否则只有「这份形状正是被冻结的那份」才算
+  const frozenView: Frozen | null = opened
+    ? { id: opened.id, name: opened.name }
+    : frozen && frozen.origin === origin
+      ? { id: frozen.id, name: frozen.name }
+      : null
+
+  const sourceName = opened
+    ? `${opened.name} · ${opened.id}`
+    : readOk
+      ? (activeFile?.name ?? '手绘')
+      : PRESET_NAMES[preset]
+  const rate = theta.speed / theta.T
 
   return (
     <div className="flex h-dvh flex-col">
@@ -119,27 +305,31 @@ export default function App() {
           aria-label="渲染画布"
           className="relative min-h-72 min-w-0 overflow-hidden rounded-lg border border-hairline bg-paper"
         >
-          <FourierStage scene={scene} trail={trail} playing={playing} highlight={highlight} />
+          <FourierStage scene={scene} trail={theta.trail} playing={playing} highlight={highlight} rate={rate} />
         </section>
 
         <aside className="flex min-h-0 flex-col gap-5 overflow-y-auto rounded-lg border border-hairline p-4">
           <SourcePanel
-            file={upload}
+            tab={tab}
+            onTab={onTab}
+            file={activeFile}
             paths={read?.paths ?? 0}
+            strokes={strokes}
+            onStrokes={onStrokes}
             subpaths={read?.sample?.subpaths ?? null}
             blocked={read !== null && !read.ok}
             options={opts}
             diagnostics={read?.diagnostics ?? []}
-            onPick={(file) => {
-              void loadFile(file)
+            onPick={(f) => {
+              void loadFile(f)
             }}
             onClear={() => {
-              setUpload(null)
-              setPicked(null)
+              setFile(null)
+              setPickedN(null)
             }}
-            onChange={(patch) => {
-              setOpts((o) => ({ ...o, ...patch }))
-              setPicked(null)
+            onChange={(p) => {
+              setOpts((o) => ({ ...o, ...p }))
+              setPickedN(null)
             }}
           />
 
@@ -159,23 +349,33 @@ export default function App() {
             </select>
           </label>
 
-          <Range
-            label="项数 K"
-            value={k}
-            min={1}
-            max={256}
-            step={1}
-            onChange={setK}
-            hint="参与合成的圆个数，按振幅从大到小取。形状自带频谱时，K 再大也不会长出新的圆。"
-          />
-
-          <Range label="轨迹比例" value={trail} min={0} max={1} step={0.05} onChange={(v) => setTrail(Number(v.toFixed(2)))} />
+          <ValuePanel theta={theta} onPatch={patch} onReset={reset} />
 
           <SpectrumPanel spectrum={spectrum} highlight={highlight} onSelect={pick} />
 
           <Suspense fallback={<PanelSkeleton />}>
             <FormulaPanel scene={scene} highlight={highlight} onSelect={pick} />
           </Suspense>
+
+          {pickedN !== null && <TermEditor n={pickedN} scene={scene} perN={theta.perN} onPerN={onPerN} />}
+
+          <AssetPanel
+            frozen={frozenView}
+            assets={assets}
+            diagnostics={assetDiag}
+            busy={busy}
+            onFreeze={() => {
+              void freeze()
+            }}
+            onOpen={openAsset}
+            onExport={downloadAsset}
+            onDelete={(a) => {
+              void removeAsset(a)
+            }}
+            onImport={(f) => {
+              void importAsset(f)
+            }}
+          />
 
           <div className="flex items-center gap-3 border-t border-hairline pt-4 text-sm">
             <button

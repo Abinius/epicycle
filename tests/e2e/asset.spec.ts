@@ -1,0 +1,204 @@
+import { readFileSync } from 'node:fs'
+import { expect, test, type Page } from '@playwright/test'
+
+/** 统计画布上与默认背景 #FBFAF7 不同的像素数 */
+function paintedPixels(page: Page) {
+  return page.locator('[data-testid="stage"]').evaluate((el) => {
+    const canvas = el as HTMLCanvasElement
+    const data = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data
+    let diff = 0
+    for (let i = 0; i < data.length; i += 4) {
+      if (Math.abs(data[i] - 251) + Math.abs(data[i + 1] - 250) + Math.abs(data[i + 2] - 247) > 24) diff++
+    }
+    return diff
+  })
+}
+
+/**
+ * 手绘一条开放弧线。走真实指针事件（Playwright 的 mouse 会派发 pointer 事件），
+ * 端点离得远，所以「首尾没连上」的诊断应当出现。
+ */
+async function drawArc(page: Page) {
+  const box = (await page.getByLabel('手绘区').boundingBox())!
+  const at = (u: number, v: number): [number, number] => [box.x + box.width * u, box.y + box.height * v]
+  const path: [number, number][] = [
+    [0.12, 0.75],
+    [0.2, 0.5],
+    [0.32, 0.3],
+    [0.5, 0.22],
+    [0.68, 0.3],
+    [0.8, 0.5],
+    [0.85, 0.72],
+  ]
+  await page.mouse.move(...at(...path[0]))
+  await page.mouse.down()
+  for (const p of path.slice(1)) await page.mouse.move(...at(...p))
+  await page.mouse.up()
+}
+
+/** 当前画布对应的傅里叶公式文本——系数一致则逐字一致，也就等于逐帧一致 */
+async function formulaText(page: Page) {
+  const formula = page.getByTestId('formula')
+  await expect(formula.locator('.katex')).not.toHaveCount(0)
+  return formula.innerText()
+}
+
+/** 导出第一行资产，返回落盘路径 */
+async function exportFirst(page: Page, name: string) {
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByTestId('asset-row').first().getByRole('button', { name: '导出' }).click(),
+  ])
+  const path = test.info().outputPath(name)
+  await download.saveAs(path)
+  return path
+}
+
+test('手绘：笔画串成一条路径，出动画并报未闭合，两种闭合方式都可用', async ({ page }) => {
+  const errors: string[] = []
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text())
+  })
+  page.on('pageerror', (err) => errors.push(err.message))
+
+  await page.goto('/')
+  await page.getByRole('button', { name: '手绘' }).click()
+  await expect(page.getByTestId('stroke-count')).toHaveText('0 笔')
+
+  await drawArc(page)
+  await expect(page.getByTestId('stroke-count')).toHaveText('1 笔')
+  await expect(page.getByTestId('shape-name')).toContainText('手绘')
+  // 开放笔迹：直线闭合会留一道缺口，诊断按 §10 #5 报出来
+  await expect(page.getByLabel('预检诊断')).toContainText('没有首尾相连')
+  await expect.poll(() => paintedPixels(page), { timeout: 8000 }).toBeGreaterThan(200)
+
+  // 换成镜像回扫：诊断消失（没有任何诊断时整个列表不渲染）
+  await page.getByLabel('闭合方式').selectOption('mirror')
+  await expect(page.getByLabel('预检诊断')).toHaveCount(0)
+
+  // 再画一笔：两笔各是一条子路径，画面照旧
+  await drawArc(page)
+  await expect(page.getByTestId('stroke-count')).toHaveText('2 笔')
+
+  // 撤销上一笔、清空：都回到「没有手绘」的状态
+  await page.getByRole('button', { name: '撤销上一笔' }).click()
+  await expect(page.getByTestId('stroke-count')).toHaveText('1 笔')
+  await page.getByRole('button', { name: '清空' }).click()
+  await expect(page.getByTestId('stroke-count')).toHaveText('0 笔')
+  // 手绘清空后画面回到预置形状，而不是留在残影上
+  await expect(page.getByTestId('shape-name')).toContainText('心形')
+
+  expect(errors).toEqual([])
+})
+
+test('冻结 → 刷新页面 → 打开：资产留在本地，公式逐字一致', async ({ page }) => {
+  const errors: string[] = []
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text())
+  })
+  page.on('pageerror', (err) => errors.push(err.message))
+
+  await page.goto('/')
+  await page.getByLabel('上传 SVG 文件').setInputFiles('tests/e2e/fixtures/signature.svg')
+  await expect(page.getByLabel('预检诊断')).toContainText('没有首尾相连')
+  const atFreeze = await formulaText(page)
+
+  // 冻结前是「试算中」，冻结后显示资产名与校验短码
+  await expect(page.getByTestId('freeze-state')).toContainText('试算中')
+  await page.getByRole('button', { name: '冻结为资产' }).click()
+  await expect(page.getByTestId('freeze-state')).toContainText('已冻结')
+
+  const rows = page.getByTestId('asset-row')
+  await expect(rows).toHaveCount(1)
+  await expect(rows.first()).toContainText('signature.svg')
+  const shortCode = ((await rows.first().innerText()).match(/fa_[0-9a-f]{6}/) ?? [''])[0]
+  expect(shortCode, '资产行里应当有 fa_ 短码').not.toBe('')
+
+  // 刷新：内存全丢，只剩 IndexedDB。资产还在，说明真写进去了
+  await page.reload()
+  await expect(page.getByTestId('freeze-state')).toContainText('试算中')
+  await expect(rows).toHaveCount(1)
+  await expect(rows.first()).toContainText(shortCode)
+
+  // 打开它：系数回到工作台，公式与冻结时逐字一致
+  await rows.first().getByRole('button', { name: '打开' }).click()
+  await expect(page.getByTestId('freeze-state')).toContainText('已冻结')
+  await expect(page.getByTestId('shape-name')).toContainText(shortCode)
+  expect(await formulaText(page)).toBe(atFreeze)
+  await expect.poll(() => paintedPixels(page), { timeout: 8000 }).toBeGreaterThan(200)
+
+  expect(errors).toEqual([])
+})
+
+test('冻结 → 导出 JSON → 干净的无痕上下文导入 → 再导出逐字节相同（M2 出口标准）', async ({
+  page,
+  browser,
+}) => {
+  await page.goto('/')
+  await page.getByLabel('上传 SVG 文件').setInputFiles('tests/e2e/fixtures/signature.svg')
+  await expect(page.getByLabel('预检诊断')).toContainText('没有首尾相连')
+  await page.getByRole('button', { name: '冻结为资产' }).click()
+  await expect(page.getByTestId('asset-row')).toHaveCount(1)
+
+  const first = await exportFirst(page, 'frozen.json')
+  const before = readFileSync(first, 'utf8')
+  expect(before).toContain('fourierboard/asset@1.0')
+
+  // 全新的上下文：IndexedDB 是空的，唯一的输入就是那个文件
+  const clean = await browser.newContext({ baseURL: test.info().project.use.baseURL })
+  try {
+    const fresh = await clean.newPage()
+    await fresh.goto('/')
+    await expect(fresh.getByTestId('asset-row')).toHaveCount(0)
+
+    await fresh.getByLabel('导入资产 JSON').setInputFiles(first)
+    // 导入即打开：画面直接换成这份资产
+    await expect(fresh.getByTestId('asset-row')).toHaveCount(1)
+    await expect(fresh.getByTestId('freeze-state')).toContainText('已冻结')
+
+    const second = await exportFirst(fresh, 'reimported.json')
+    const after = readFileSync(second, 'utf8')
+    // 文本一模一样 → 系数一模一样 → renderFrame 是纯函数 → 每一帧都一模一样
+    expect(after).toBe(before)
+  } finally {
+    await clean.close()
+  }
+})
+
+test('导入坏文件给出诊断，删除把资产真的从本地库里去掉', async ({ page }) => {
+  const errors: string[] = []
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text())
+  })
+  page.on('pageerror', (err) => errors.push(err.message))
+
+  await page.goto('/')
+  await page.getByLabel('上传 SVG 文件').setInputFiles('tests/e2e/fixtures/nopath.svg')
+  // 预检有 error 时画面留在预置形状，冻结的也就是这个预置
+  await page.getByRole('button', { name: '冻结为资产' }).click()
+  await expect(page.getByTestId('asset-row')).toHaveCount(1)
+
+  // 不是资产文件：明确报出来，且不动资产库
+  await page.getByLabel('导入资产 JSON').setInputFiles({
+    name: 'not-an-asset.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from('{"schema":"whatever"}'),
+  })
+  await expect(page.getByLabel('资产库').getByLabel('预检诊断')).toContainText('不是有效的资产文件')
+  await expect(page.getByTestId('asset-row')).toHaveCount(1)
+
+  // 打开它：工作台换成这份资产，冻结态挂上它的短码
+  await page.getByTestId('asset-row').first().getByRole('button', { name: '打开' }).click()
+  await expect(page.getByTestId('freeze-state')).toContainText('已冻结')
+  await expect(page.getByTestId('shape-name')).toContainText('fa_')
+
+  // 删除：列表空掉，工作台也把这份资产撤走——不留一个已经不存在的资产名
+  await page.getByTestId('asset-row').first().getByRole('button', { name: '删除' }).click()
+  await expect(page.getByTestId('asset-row')).toHaveCount(0)
+  await expect(page.getByTestId('freeze-state')).toContainText('试算中')
+  await expect(page.getByTestId('shape-name')).toContainText('心形')
+  await page.reload()
+  await expect(page.getByTestId('asset-row')).toHaveCount(0)
+
+  expect(errors).toEqual([])
+})

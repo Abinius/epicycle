@@ -103,7 +103,7 @@ test('上传 SVG：出动画、公式同步换源，坏文件给出诊断', asyn
   page.on('pageerror', (err) => errors.push(err.message))
 
   await page.goto('/')
-  const input = page.locator('input[type=file]')
+  const input = page.getByLabel('上传 SVG 文件')
 
   // 一条未闭合的手写签名：采样后应当出动画，并提示首尾没连上
   await input.setInputFiles('tests/e2e/fixtures/signature.svg')
@@ -170,6 +170,53 @@ test('改项数、换形状、暂停播放：画布继续绘制且无报错', as
   await page.getByRole('button', { name: '暂停' }).click()
   await expect(page.getByRole('button', { name: '播放' })).toBeVisible()
 
+  expect(errors).toEqual([])
+})
+
+test('L1/L2 算子实时改写公式与系数表，重置可还原', async ({ page }) => {
+  const errors: string[] = []
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text())
+  })
+  page.on('pageerror', (err) => errors.push(err.message))
+
+  await page.goto('/')
+  const panel = page.getByLabel('傅里叶公式')
+  const rows = page.getByTestId('coeff-row')
+  await expect(rows.first()).toBeVisible()
+  // 心形解析上带限于 |n| ≤ 4：恰好 8 项全参与，无 K 截断补位，L2 进出看得清
+  const rowsBefore = await rows.count()
+  const formulaBefore = await panel.innerText()
+
+  // L1：等权化 —— 所有半径归一，公式立刻变
+  await page.getByRole('checkbox', { name: /等权化/ }).check()
+  await expect.poll(() => panel.innerText()).not.toBe(formulaBefore)
+  await page.getByRole('checkbox', { name: /等权化/ }).uncheck()
+
+  // L1：全局相位 —— 连续滑块也实时反映
+  const phase = page.getByRole('slider', { name: '全局相位 (弧度)' })
+  await phase.fill('1.5')
+  await expect(phase).toHaveValue('1.5')
+
+  // L2：点选一行 → 出编辑器；γ 归零把该项挤出系数表（以 n 为锚，编辑器不消失）
+  await rows.nth(1).click()
+  const editor = page.getByTestId('term-editor')
+  await expect(editor).toBeVisible()
+  const gamma = page.getByRole('slider', { name: '幅度倍率 γ' })
+  await gamma.fill('0')
+  await expect.poll(() => rows.count()).toBe(rowsBefore - 1)
+  // 项被挤出也不丢锚点：编辑器仍在，可调回
+  await expect(editor).toBeVisible()
+  await gamma.fill('1')
+  await expect.poll(() => rows.count()).toBe(rowsBefore)
+
+  // 重置：清掉全部编辑（相位/等权/perN），回到默认
+  await page.getByRole('button', { name: '重置' }).click()
+  await expect.poll(() => panel.innerText()).toBe(formulaBefore)
+  // 编辑器随 pickedN 清空而消失
+  await expect(editor).toHaveCount(0)
+
+  await expect.poll(() => paintedPixels(page), { timeout: 8000 }).toBeGreaterThan(200)
   expect(errors).toEqual([])
 })
 

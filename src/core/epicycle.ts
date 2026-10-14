@@ -1,4 +1,5 @@
 import type { Coefficient, FourierAsset, Four, Scene, Term, Theta } from './types.js'
+import { VIEW_BUDGET } from './types.js'
 import { TWO_PI, wrap01 } from './complex.js'
 
 /**
@@ -46,7 +47,7 @@ export function buildScene(source: FourierAsset | readonly Coefficient[], theta:
   const active = terms.slice(0, K)
   for (const t of active) t.weight = sum > 0 ? t.radius / sum : 0
 
-  return { center, terms: active, viewScale: 0.8 / Math.max(sum, 1e-9), K, M: coeffs.length }
+  return { center, terms: active, viewScale: VIEW_BUDGET / Math.max(sum, 1e-9), K, M: coeffs.length }
 }
 
 /**

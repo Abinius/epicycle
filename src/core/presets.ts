@@ -47,9 +47,35 @@ function isFormulaId(id: PresetId): id is FormulaId {
   return id in formulas
 }
 
-/** 预置形状 → 傅里叶系数。N 必须是 2 的幂，否则 dft / sample 抛错 */
-export function presetCoeffs(id: PresetId, N: number = PRESET_N): Coefficient[] {
-  if (isFormulaId(id)) return dft(formulas[id](N).points, N)
+/** 采样摘要：冻结资产要的字段（点数、闭合、容差、子路径数），与上传同一套语义 */
+interface PresetSample {
+  points: Float64Array
+  N: number
+  closed: boolean
+  close_mode: SampleOptions['close_mode']
+  subpaths: number
+  /** 细分容差；解析生成器直接给点、没有细分，为 0 */
+  subdivide_eps: number
+}
+
+export interface Preset {
+  coeffs: Coefficient[]
+  sample: PresetSample
+}
+
+/** 预置形状 → 系数，一次给全：渲染要系数，冻结资产要采样参数 */
+export function presetOf(id: PresetId, N: number = PRESET_N): Preset {
+  if (isFormulaId(id)) {
+    const points = formulas[id](N).points
+    return {
+      coeffs: dft(points, N),
+      sample: { points, N, closed: true, close_mode: 'join', subpaths: 1, subdivide_eps: 0 },
+    }
+  }
   const { d, close_mode } = PATH_PRESETS[id]
-  return dft(sample(d, { N, close_mode }).points, N)
+  const s = sample(d, { N, close_mode })
+  return {
+    coeffs: dft(s.points, N),
+    sample: { points: s.points, N, closed: s.closed, close_mode, subpaths: s.subpaths, subdivide_eps: s.tolerance },
+  }
 }

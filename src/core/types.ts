@@ -72,11 +72,17 @@ export const defaultTheta: Theta = {
   equalize: false,
 }
 
+/**
+ * 笔尖活动半径预算：viewScale = VIEW_BUDGET / Σ|c_n|，保证合成笔尖不出单位圆。
+ * buildScene 用它算当前场景的缩放，冻结资产用它记原始缩放——两处必须同一个数。
+ */
+export const VIEW_BUDGET = 0.8
+
 /** buildScene 的产物：n=0 项作为原点，其余按 |c_n| 降序取前 K 项 */
 export interface Scene {
   center: Four
   terms: Term[]
-  /** 0.8 / Σ|c_n'|，保证笔尖始终落在单位半径内 */
+  /** VIEW_BUDGET / Σ|c_n'|，保证笔尖始终落在单位半径内 */
   viewScale: number
   /** 实际参与渲染的项数（已按 K 截断） */
   K: number
@@ -90,7 +96,14 @@ export interface FourierAsset {
   id: string
   name: string
   created_at: string
-  source: { type: 'svg' | 'draw' | 'formula'; file_name?: string; bytes?: number; subpaths?: number }
+  /** preset 存预置 id（六个示例），其余三种是用户自己给的形状 */
+  source: {
+    type: 'svg' | 'draw' | 'formula' | 'preset'
+    preset?: string
+    file_name?: string
+    bytes?: number
+    subpaths?: number
+  }
   sampling: { N: number; closed: boolean; close_mode: 'join' | 'mirror'; subdivide_eps: number }
   domain: { n_min: number; n_max: number }
   bounds: {

@@ -171,6 +171,19 @@ describe('sample：等弧长重采样', () => {
     expect(longest.bbox).toEqual([0, 0, 2, 0])
   })
 
+  it('多子路径触发 reverse 分支时不把 x/y 互换', () => {
+    // A: (0,0)->(10,0)；B: (10,-5)->(10,0)，y 翻转后 B 的 tail(10,0) 贴 A 的 tail(10,0)，
+    // 贪心串接会把 B 倒序接回。旧实现用 piece.reverse() 作用于交错的扁平数组，把每点的 x/y 互换。
+    const r = sample('M 0 0 L 10 0 M 10 -5 L 10 0', { N: 8, close_mode: 'join' })
+    const pts = Array.from(r.points)
+    for (let i = 0; i < pts.length; i += 2) {
+      expect(pts[i], `x@${i}`).toBeGreaterThanOrEqual(-0.01)
+      expect(pts[i], `x@${i}`).toBeLessThanOrEqual(10.01)
+      expect(pts[i + 1], `y@${i}`).toBeGreaterThanOrEqual(-0.01)
+      expect(pts[i + 1], `y@${i}`).toBeLessThanOrEqual(5.01)
+    }
+  })
+
   it('退化输入：空路径与单点都不崩溃', () => {
     const empty = sample('', OPTS)
     expect(empty.subpaths).toBe(0)

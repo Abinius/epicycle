@@ -3,15 +3,21 @@ import {
   Q_RANGE,
   Q_STEP,
   SCHEMA,
+  SCHEMA_MAJOR,
   base64UrlDecode,
   base64UrlEncode,
+  boundsOf,
   checksum,
   createAsset,
+  exportJson,
   fnv1a,
   fromShortCode,
+  parseAsset,
   toShortCode,
+  validateAsset,
 } from '../asset.js'
-import type { Coefficient } from '../types.js'
+import { ASSET_DIAGNOSTICS } from '../diagnostic.js'
+import { VIEW_BUDGET, type Coefficient, type FourierAsset } from '../types.js'
 
 const COEFFS: Coefficient[] = [
   { n: 0, re: 0.1, im: -0.05 },
@@ -114,5 +120,121 @@ describe('base64url', () => {
 
   it('解码时忽略非字母表字符', () => {
     expect(Array.from(base64UrlDecode('SG k!'))).toEqual([0x48, 0x69])
+  })
+})
+
+describe('boundsOf', () => {
+  const SPECTRUM: Coefficient[] = [
+    { n: 0, re: 2, im: -1 },
+    { n: 1, re: 3, im: 4 }, // |c| = 5
+    { n: -1, re: 0, im: 1 }, // |c| = 1
+  ]
+
+  it('质心取 c₀，radius 取最远采样点，view_scale 与渲染共用一个预算常量', () => {
+    const b = boundsOf(SPECTRUM, Float64Array.from([2, -1, 6, -1, 2, 3]))
+    expect(b.center).toEqual([2, -1])
+    expect(b.radius).toBe(4)
+    expect(b.orig_bbox).toEqual([2, -1, 6, 3])
+    expect(b.view_scale).toBeCloseTo(VIEW_BUDGET / 6, 12)
+  })
+
+  it('没有采样点时给零，不产出 Infinity（JSON 会把它写成 null）', () => {
+    const b = boundsOf(SPECTRUM, new Float64Array(0))
+    expect(b.orig_bbox).toEqual([0, 0, 0, 0])
+    expect(b.radius).toBe(0)
+    expect(b.center).toEqual([2, -1])
+  })
+
+  it('没有 n=0 项时质心落在原点', () => {
+    const b = boundsOf([{ n: 2, re: 1, im: 0 }], Float64Array.from([1, 1]))
+    expect(b.center).toEqual([0, 0])
+    expect(b.radius).toBeCloseTo(Math.SQRT2, 12)
+    expect(b.view_scale).toBeCloseTo(VIEW_BUDGET, 12)
+  })
+})
+
+function makeAsset(): FourierAsset {
+  return createAsset({
+    name: '心形',
+    createdAt: '2026-10-15T00:00:00.000Z',
+    source: { type: 'preset', preset: 'heart', subpaths: 1 },
+    sampling: { N: 1024, closed: true, close_mode: 'join', subdivide_eps: 0 },
+    bounds: boundsOf(COEFFS, Float64Array.from([1, 0, 0, 1, -1, 0])),
+    coeffs: COEFFS,
+    dftMs: 3.5,
+  })
+}
+
+describe('导出与导入', () => {
+  it('JSON 往返后逐字段一致，再导出逐字节相同', () => {
+    const a = makeAsset()
+    const parsed = parseAsset(exportJson(a))
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(parsed.asset).toEqual(a)
+    // M2 出口标准「冻结 → 清空 → 重新导入 → 逐帧一致」全靠这一条：文本一模一样，
+    // 系数就一模一样，纯函数渲染出的每一帧自然也一模一样
+    expect(exportJson(parsed.asset)).toBe(exportJson(a))
+  })
+
+  it('读不成 JSON、或 JSON 里不是对象，都按「不是资产文件」挡下', () => {
+    for (const text of ['', 'not json', '[]', 'null', '42', '"x"']) {
+      const r = parseAsset(text)
+      expect(r.ok, text).toBe(false)
+      if (!r.ok) expect(r.diagnostic.id).toBe(ASSET_DIAGNOSTICS.importUnreadable.id)
+    }
+  })
+
+  it('主版本更高的资产明确拒绝，不猜着降级', () => {
+    const r = validateAsset({ ...makeAsset(), schema: `fourierboard/asset@${SCHEMA_MAJOR + 1}.0` })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.diagnostic.id).toBe(ASSET_DIAGNOSTICS.importMismatch.id)
+  })
+
+  it('次要版本更高的按本版本读入，并归一到本版本的 schema', () => {
+    const r = validateAsset({ ...makeAsset(), schema: 'fourierboard/asset@1.7' })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.asset.schema).toBe(SCHEMA)
+  })
+
+  it('指纹不符即拒收：内容被动过就不再是同一份资产', () => {
+    const a = makeAsset()
+    const tampered = { ...a, coeffs: a.coeffs.map((c, i) => (i === 0 ? { ...c, re: c.re + 1 } : c)) }
+    const r = validateAsset(tampered)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.diagnostic.id).toBe(ASSET_DIAGNOSTICS.importMismatch.id)
+  })
+
+  it('缺字段、类型不对、枚举越界的一律挡下', () => {
+    const a = makeAsset()
+    const broken: unknown[] = [
+      { ...a, id: 42 },
+      { ...a, name: undefined },
+      { ...a, coeffs: [] },
+      { ...a, coeffs: [{ n: 0, re: 1, im: 'x' }] },
+      { ...a, coeffs: [{ n: 0, re: 1 }] },
+      { ...a, coeffs: [{ n: 0, re: Number.NaN, im: 0 }] },
+      { ...a, sampling: { ...a.sampling, close_mode: 'zip' } },
+      { ...a, sampling: { ...a.sampling, closed: 'yes' } },
+      { ...a, bounds: { ...a.bounds, center: [1] } },
+      { ...a, bounds: { ...a.bounds, orig_bbox: [1, 2, 3, Infinity] } },
+      { ...a, source: { type: 'png' } },
+      { ...a, source: { type: 'svg', bytes: 'x' } },
+      { ...a, meta: { ...a.meta, dft_ms: 'fast' } },
+      { ...a, schema: 'fourierboard/shape@1.0' },
+    ]
+    for (const v of broken) expect(validateAsset(v).ok, JSON.stringify(v).slice(0, 60)).toBe(false)
+  })
+
+  it('负零不破坏往返：JSON 没有 −0，指纹必须认得出还是同一组系数', () => {
+    expect(checksum([{ n: 1, re: -0, im: 0 }])).toBe(checksum([{ n: 1, re: 0, im: 0 }]))
+    const withNegZero: Coefficient[] = [{ n: 1, re: -0, im: 0 }, { n: -1, re: 0, im: -0 }]
+    expect(checksum(JSON.parse(JSON.stringify(withNegZero)) as Coefficient[])).toBe(checksum(withNegZero))
+  })
+
+  it('可选的来源字段缺省时不会凭空补出', () => {
+    const r = validateAsset({ ...makeAsset(), source: { type: 'formula' } })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.asset.source).toEqual({ type: 'formula' })
   })
 })

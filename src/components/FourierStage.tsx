@@ -11,16 +11,19 @@ export function FourierStage({
   trail,
   playing,
   highlight = null,
+  rate = 0.25,
 }: {
   scene: Scene
   trail: number
   playing: boolean
   /** 项检查：只画前 highlight+1 项的圆链 */
   highlight?: number | null
+  /** 每秒推进的周期数 = speed/T；1 表示一秒一圈 */
+  rate?: number
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const live = useRef({ scene, trail, playing, highlight })
-  live.current = { scene, trail, playing, highlight }
+  const live = useRef({ scene, trail, playing, highlight, rate })
+  live.current = { scene, trail, playing, highlight, rate }
   const clock = useRef(0)
 
   useEffect(() => {
@@ -44,7 +47,7 @@ export function FourierStage({
     const loop = (now: number) => {
       if (last) {
         const dt = (now - last) / 1000
-        if (live.current.playing) clock.current = (clock.current + dt) % 1
+        if (live.current.playing) clock.current = (clock.current + live.current.rate * dt) % 1
       }
       last = now
       renderFrame(

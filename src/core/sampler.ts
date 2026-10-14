@@ -200,7 +200,13 @@ function chain(subpaths: Float64Array[]): number[] {
       head[head.length - 2] - piece[piece.length - 2],
       head[head.length - 1] - piece[piece.length - 1],
     )
-    if (toHead < Math.hypot(head[head.length - 2] - piece[0], head[head.length - 1] - piece[1])) piece.reverse()
+    if (toHead < Math.hypot(head[head.length - 2] - piece[0], head[head.length - 1] - piece[1])) {
+      // 按点倒序：piece 是交错的扁平数组，整个数组 reverse 会把 x/y 互换（同族缺陷）
+      for (let i = 0, j = piece.length - 2; i < j; i += 2, j -= 2) {
+        const tx = piece[i]; piece[i] = piece[j]; piece[j] = tx
+        const ty = piece[i + 1]; piece[i + 1] = piece[j + 1]; piece[j + 1] = ty
+      }
+    }
     head.push(...piece.slice(2))
   }
   return head

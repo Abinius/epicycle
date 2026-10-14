@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { diagnose, type Diagnostic } from '../diagnostic.js'
+import { ASSET_DIAGNOSTICS, diagnose, storedCorrupt, type Diagnostic } from '../diagnostic.js'
 import { samplePaths } from '../sampler.js'
 import { readSvg, type SvgReadOptions } from '../source.js'
 import { extractPaths } from '../svgtext.js'
@@ -13,6 +13,9 @@ function check(svg: string, over: Partial<SvgReadOptions> = {}): Diagnostic[] {
 }
 
 const ids = (list: Diagnostic[]) => list.map((d) => d.id)
+
+/** diagnose 可能产出的编号（技术文档 §10 的 1–9 条）；10–11 属导出编码，等 M5 */
+const SAMPLING_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 describe('diagnose：预检与诊断（技术文档 §10 的 1–9 条）', () => {
   it('干净的单路径 SVG 没有任何诊断', () => {
@@ -65,10 +68,10 @@ describe('diagnose：预检与诊断（技术文档 §10 的 1–9 条）', () =
   })
 
   it('#9 K 达到可用项数上限，只是提示不算错误', () => {
-    const found = check(CIRCLE, { K: N / 2 })
+    const found = check(CIRCLE, { K: N })
     const nine = found.find((d) => d.id === 9)
     expect(nine?.severity).toBe('info')
-    expect(nine?.message).toContain(String(N / 2 - 1))
+    expect(nine?.message).toContain(String(N - 2))
   })
 
   it('还没采样、或只有采样没有系数时，不产出对应的诊断', () => {
@@ -106,5 +109,27 @@ describe('readSvg：上传通路的唯一入口', () => {
     expect(r.sample!.subpaths).toBe(2)
     // 变换后第一个子路径被平移到 x ∈ [4,100]
     expect(r.sample!.bbox[2]).toBeGreaterThan(90)
+  })
+})
+
+describe('资产库诊断（技术文档 §10 表 12 条起）', () => {
+  it('编号在全局唯一：DiagnosticList 用 id 当 key，撞号会吞掉一条', () => {
+    const assetIds = [...Object.values(ASSET_DIAGNOSTICS).map((d) => d.id), storedCorrupt(3).id]
+    const all = [...SAMPLING_IDS, ...assetIds]
+    expect(new Set(all).size).toBe(all.length)
+  })
+
+  it('每条都有文案与建议动作，编号与文档对齐', () => {
+    const all = [...Object.values(ASSET_DIAGNOSTICS), storedCorrupt(2)]
+    expect(all.map((d) => d.id)).toEqual([12, 13, 14, 15, 16])
+    for (const d of all) {
+      expect(d.message.length, `#${d.id}`).toBeGreaterThan(0)
+      expect(d.hint.length, `#${d.id}`).toBeGreaterThan(0)
+    }
+  })
+
+  it('读不出来的条数写进文案里', () => {
+    expect(storedCorrupt(5).message).toContain('5')
+    expect(storedCorrupt(5).severity).toBe('warn')
   })
 })

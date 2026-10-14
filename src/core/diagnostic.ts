@@ -3,9 +3,9 @@ import type { SampleResult } from './sampler.js'
 import { countTags, findForbidden } from './svgtext.js'
 
 /**
- * 预检与诊断（技术文档 §10 的 1–9 条）。
- * 10–12 条属于导出编码与 IndexedDB 空间，不在采样链路上，等 M5 再接。
- * 所有文案从这里出，UI 只负责渲染——错误不许散落在代码各处。
+ * 预检与诊断文案的唯一出处：技术文档 §10 的 1–9 条（采样链路，见 diagnose）与
+ * 12 条起（资产库与导入，见 ASSET_DIAGNOSTICS）。10–11 条属导出编码，等 M5 再接。
+ * UI 只负责渲染——错误不许散落在代码各处。
  */
 
 export type Severity = 'error' | 'warn' | 'info'
@@ -112,7 +112,10 @@ export function diagnose(input: DiagnoseInput): Diagnostic[] {
       })
     }
 
-    const limit = (input.coeffs.length - 1) / 2
+    // 可用项上限 = 非零有符号系数的总数 = coeffs.length-1（coeffs 含一个 n=0 项，
+    // 故 N 点 DFT 出 2M-1=N-1 个系数，去 n=0 即 N-2=2(M-1)）。K 数的是有符号项，
+    // 所以上限就是非零系数总数，不是正频率个数 M-1——后者只有真值的一半。
+    const limit = input.coeffs.length - 1
     if (input.K >= limit) {
       out.push({
         id: 9,
@@ -124,4 +127,49 @@ export function diagnose(input: DiagnoseInput): Diagnostic[] {
   }
 
   return out
+}
+
+/**
+ * 资产库与导入的诊断（技术文档 §10 表的 12 条起）。与采样链路分开成组，
+ * 但共用 Diagnostic 类型与 DiagnosticList 组件——用户可见的文案仍然只有一个出处。
+ */
+export const ASSET_DIAGNOSTICS = {
+  /** 12：写入被配额挡下 */
+  storageFull: {
+    id: 12,
+    severity: 'error',
+    message: '本地存储空间不足，没存下这个资产',
+    hint: '删掉几个旧资产后重试',
+  },
+  /** 13：浏览器根本不让写（隐私模式 / 被策略禁用） */
+  storageUnavailable: {
+    id: 13,
+    severity: 'error',
+    message: '本浏览器不允许写入本地存储，资产存不下来',
+    hint: '改用「导出 JSON」保存，之后用「导入 JSON」恢复',
+  },
+  /** 14：文件读不出资产的样子 */
+  importUnreadable: {
+    id: 14,
+    severity: 'error',
+    message: '这个文件不是有效的资产文件',
+    hint: '只有「导出 JSON」产生的 .json 能导入',
+  },
+  /** 15：结构看着像资产，但版本或指纹对不上 */
+  importMismatch: {
+    id: 15,
+    severity: 'error',
+    message: '资产版本不受支持，或内容与指纹不符',
+    hint: '用原来的浏览器重新导出一份',
+  },
+} satisfies Record<string, Diagnostic>
+
+/** 16：库里有资产读不出来。只跳过、不删除——先让用户自己决定 */
+export function storedCorrupt(count: number): Diagnostic {
+  return {
+    id: 16,
+    severity: 'warn',
+    message: `本地有 ${count} 个资产读不出来，已跳过`,
+    hint: '重新冻结一次，或删掉它们',
+  }
 }
