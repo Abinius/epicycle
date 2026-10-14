@@ -11,13 +11,14 @@ Apache-2.0 是宽松许可，与 MIT 同等可商用；本项目不需要专利�
 
 ---
 
-## 1. 已安装（16 个）
+## 1. 已安装（17 个）
 
 | 依赖 | 版本 | 许可 | 作用 |
 | --- | --- | --- | --- |
 | react | 19.3.0 | MIT | UI 框架 |
 | react-dom | 19.3.0 | MIT | 渲染入口 |
 | katex | 0.19.0 | MIT | 公式排版（M3）。**懒加载**：`React.lazy` 引入，JS 与 CSS 落在独立 chunk（gzip 87 KB），不进首屏；自带 60 个字体文件，由浏览器按需下载 |
+| svg-pathdata | 9.0.0 | MIT | SVG path 解析与指令归一化（M2）。纯解析、无 DOM 依赖，只用它的 parse/toAbs/normalizeST/normalizeHVZ/qtToC/aToC，弧长细分与重采样仍自研 |
 | vite | 8.3.4 | MIT | 构建（rolldown 底座） |
 | @vitejs/plugin-react | 6.1.2 | MIT | JSX + HMR |
 | tailwindcss | 4.3.3 | MIT | 样式（`@theme` 增量令牌） |
@@ -32,9 +33,9 @@ Apache-2.0 是宽松许可，与 MIT 同等可商用；本项目不需要专利�
 | @types/react | 19.3.0 | MIT | 类型 |
 | @types/react-dom | 19.3.0 | MIT | 类型 |
 
-生产运行时依赖只有 `react` + `react-dom` + `katex`，全部在构建期打进 bundle（无运行时 CDN、无第三方字体服务）。构建产物 gzip：主入口 76 KB，KaTeX 懒加载 chunk 87 KB，CI 门禁口径（`dist/assets/` 下全部 JS+CSS）合计 158.5 KB（预算 300 KB）。
+生产运行时依赖只有 `react` + `react-dom` + `katex` + `svg-pathdata`，全部在构建期打进 bundle（无运行时 CDN、无第三方字体服务）。构建产物 gzip：主入口 85 KB（含 svg-pathdata 的 ~11 KB）、KaTeX 懒加载 chunk 87 KB，CI 门禁口径（`dist/assets/` 下全部 JS+CSS）合计 175.5 KB（预算 300 KB）。若首屏要再瘦，采样链路（sampler/svgtext/source）可以改成点「上传」时才 `import()`。
 
-## 2. 后续里程碑才装（7 个，均已核对许可）
+## 2. 后续里程碑才装（6 个，均已核对许可）
 
 按开发计划逐个引入，避免未使用的依赖提前进包。
 

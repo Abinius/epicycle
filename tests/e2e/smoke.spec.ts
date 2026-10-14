@@ -68,6 +68,46 @@ test('公式与系数表随形状和 K 同步，点项只画到该项', async ({
   expect(errors).toEqual([])
 })
 
+test('上传 SVG：出动画、公式同步换源，坏文件给出诊断', async ({ page }) => {
+  const errors: string[] = []
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') errors.push(msg.text())
+  })
+  page.on('pageerror', (err) => errors.push(err.message))
+
+  await page.goto('/')
+  const input = page.locator('input[type=file]')
+
+  // 一条未闭合的手写签名：采样后应当出动画，并提示首尾没连上
+  await input.setInputFiles('tests/e2e/fixtures/signature.svg')
+  await expect(page.getByTestId('shape-name')).toContainText('signature.svg')
+  await expect(page.getByLabel('预检诊断')).toContainText('没有首尾相连')
+  await expect(page.getByTestId('formula').locator('.katex')).not.toHaveCount(0)
+  await expect.poll(() => paintedPixels(page), { timeout: 8000 }).toBeGreaterThan(200)
+
+  // 系数表按上传的频谱排，和预置形状不是一回事
+  const rows = page.getByTestId('coeff-row')
+  await expect(rows.first()).toBeVisible()
+  const uploaded = await page.getByTestId('formula').innerText()
+
+  // 换成镜像回扫：闭合诊断消失（没有任何诊断时列表整个不渲染）
+  await page.getByLabel('闭合方式').selectOption('mirror')
+  await expect(page.getByLabel('预检诊断')).toHaveCount(0)
+
+  // 只有 rect 的文件：报「未找到路径数据」，画面回到预置形状
+  await input.setInputFiles('tests/e2e/fixtures/nopath.svg')
+  await expect(page.getByLabel('预检诊断')).toContainText('未找到路径数据')
+  await expect(page.getByText('预检未通过')).toBeVisible()
+  expect(await page.getByTestId('formula').innerText()).not.toBe(uploaded)
+
+  // 换回预置形状：上传状态被清掉
+  await page.getByRole('combobox', { name: '形状' }).selectOption('heart')
+  await expect(page.getByTestId('shape-name')).toContainText('心形')
+  await expect(page.getByText('预检未通过')).toHaveCount(0)
+
+  expect(errors).toEqual([])
+})
+
 test('改项数、换形状、暂停播放：画布继续绘制且无报错', async ({ page }) => {
   const errors: string[] = []
   page.on('console', (msg) => {

@@ -1,11 +1,21 @@
 import { Suspense, lazy, useMemo, useState } from 'react'
 import { FourierStage, buildDemoScene } from './components/FourierStage.js'
+import { SourcePanel, type SourceOptions } from './components/SourcePanel.js'
+import { buildScene } from './core/epicycle.js'
 import { formulaNames, formulas, type FormulaId } from './core/formulas.js'
+import { readSvg } from './core/source.js'
+import { defaultTheta } from './core/types.js'
 
 // KaTeX 随本 chunk 一起加载，不进首屏；懒加载期间显示占位块
 const FormulaPanel = lazy(() => import('./components/FormulaPanel.js'))
 
 const IDS = Object.keys(formulas) as FormulaId[]
+
+interface Upload {
+  name: string
+  text: string
+  bytes: number
+}
 
 function PanelSkeleton() {
   return (
@@ -62,11 +72,39 @@ export default function App() {
   const [trail, setTrail] = useState(0.35)
   const [playing, setPlaying] = useState(true)
   const [picked, setPicked] = useState<number | null>(null)
+  const [upload, setUpload] = useState<Upload | null>(null)
+  const [opts, setOpts] = useState<SourceOptions>({ N: 1024, close_mode: 'join', longest_only: false })
 
-  const scene = useMemo(() => buildDemoScene(id, k), [id, k])
+  // 上传链路的唯一入口：抽路径 → 采样 → DFT → 诊断
+  const read = useMemo(
+    () =>
+      upload
+        ? readSvg(upload.text, { ...opts, K: k, bytes: upload.bytes })
+        : null,
+    [upload, opts, k],
+  )
+
+  const scene = useMemo(
+    () => (read?.ok && read.coeffs ? buildScene(read.coeffs, { ...defaultTheta, K: k }) : buildDemoScene(id, k)),
+    [read, id, k],
+  )
   // 换了形状或 K 之后旧下标会指向另一项，越界就不画
   const highlight = picked !== null && picked < scene.terms.length ? picked : null
   const pick = (index: number | null) => setPicked((cur) => (index === null ? null : cur === index ? null : index))
+
+  const usePreset = (next: FormulaId) => {
+    setId(next)
+    setUpload(null)
+    setPicked(null)
+  }
+
+  const loadFile = async (file: File) => {
+    const text = await file.text()
+    setUpload({ name: file.name, text, bytes: file.size })
+    setPicked(null)
+  }
+
+  const sourceName = read?.ok ? upload?.name : formulaNames[id]
 
   return (
     <div className="flex h-dvh flex-col">
@@ -85,12 +123,32 @@ export default function App() {
         </section>
 
         <aside className="flex min-h-0 flex-col gap-5 overflow-y-auto rounded-lg border border-hairline p-4">
+          <SourcePanel
+            file={upload}
+            paths={read?.paths ?? 0}
+            subpaths={read?.sample?.subpaths ?? null}
+            blocked={read !== null && !read.ok}
+            options={opts}
+            diagnostics={read?.diagnostics ?? []}
+            onPick={(file) => {
+              void loadFile(file)
+            }}
+            onClear={() => {
+              setUpload(null)
+              setPicked(null)
+            }}
+            onChange={(patch) => {
+              setOpts((o) => ({ ...o, ...patch }))
+              setPicked(null)
+            }}
+          />
+
           <label className="flex flex-col gap-1.5 text-sm">
-            <span className="text-mist/70">形状</span>
+            <span className="text-mist/70">预置形状</span>
             <select
               aria-label="形状"
               value={id}
-              onChange={(e) => setId(e.target.value as FormulaId)}
+              onChange={(e) => usePreset(e.target.value as FormulaId)}
               className="border border-hairline bg-ink2 px-2 py-1.5 text-sm"
             >
               {IDS.map((x) => (
@@ -134,8 +192,8 @@ export default function App() {
             </dl>
           </div>
 
-          <p data-testid="shape-name" className="border-t border-hairline pt-4 text-xs leading-relaxed text-mist/45">
-            当前：{formulaNames[id]}
+          <p data-testid="shape-name" className="truncate border-t border-hairline pt-4 text-xs leading-relaxed text-mist/45">
+            当前：{sourceName}
           </p>
         </aside>
       </main>
