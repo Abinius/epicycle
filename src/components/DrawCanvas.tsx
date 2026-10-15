@@ -79,7 +79,7 @@ export function DrawCanvas({
       <canvas
         ref={canvasRef}
         aria-label={t('手绘区')}
-        className="block h-44 w-full cursor-crosshair touch-none rounded border border-hairline bg-paper"
+        className="block h-72 w-full cursor-crosshair touch-none rounded border border-hairline bg-paper"
         onPointerDown={(e) => {
           if (e.pointerType === 'mouse' && e.button !== 0) return // 鼠标只认左键
           if (active.current !== null) return // 已经有一根在画，其余一律不理
