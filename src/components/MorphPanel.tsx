@@ -1,4 +1,5 @@
 import type { FourierAsset } from '../core/types.js'
+import { useT } from '../i18n/context.js'
 import { Range } from './Range.js'
 
 /** 过渡状态：两端各指一份库里的资产，w ∈ [0,1] */
@@ -26,16 +27,17 @@ export function MorphPanel({
   morph: MorphState | null
   onMorph: (next: MorphState | null) => void
 }) {
+  const t = useT()
   const enough = assets.length >= 2
 
   return (
-    <section aria-label="形状过渡" className="flex flex-col gap-3 border-t border-hairline pt-4">
+    <section aria-label={t('形状过渡')} className="flex flex-col gap-3 border-t border-hairline pt-4">
       <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-sm text-mist/70">过渡</h2>
+        <h2 className="text-sm text-mist/70">{t('过渡')}</h2>
         <label className="flex items-center gap-2 text-xs">
           <input
             type="checkbox"
-            aria-label="启用过渡"
+            aria-label={t('启用过渡')}
             data-testid="morph-toggle"
             disabled={!enough}
             checked={morph !== null}
@@ -44,22 +46,22 @@ export function MorphPanel({
             }
             className="accent-sage disabled:opacity-40"
           />
-          <span className="text-mist/60">启用</span>
+          <span className="text-mist/60">{t('启用')}</span>
         </label>
       </div>
 
       {morph === null ? (
         <p className="text-xs leading-relaxed text-mist/35">
           {enough
-            ? '在库里的两份资产之间做连续形变，两端与各自原图逐位相同。'
-            : '库里至少要有两份资产才能做过渡——先冻结两个形状。'}
+            ? t('在库里的两份资产之间做连续形变，两端与各自原图逐位相同。')
+            : t('库里至少要有两份资产才能做过渡——先冻结两个形状。')}
         </p>
       ) : (
         <>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-mist/70">起点</span>
+            <span className="text-mist/70">{t('起点')}</span>
             <select
-              aria-label="过渡起点"
+              aria-label={t('过渡起点')}
               className={SELECT}
               value={morph.a}
               onChange={(e) => onMorph({ ...morph, a: e.target.value })}
@@ -73,9 +75,9 @@ export function MorphPanel({
           </label>
 
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-mist/70">终点</span>
+            <span className="text-mist/70">{t('终点')}</span>
             <select
-              aria-label="过渡终点"
+              aria-label={t('过渡终点')}
               className={SELECT}
               value={morph.b}
               onChange={(e) => onMorph({ ...morph, b: e.target.value })}
@@ -89,13 +91,13 @@ export function MorphPanel({
           </label>
 
           <Range
-            label="过渡 w"
+            label={t('过渡 w')}
             value={morph.w}
             min={0}
             max={1}
             step={0.01}
             onChange={(v) => onMorph({ ...morph, w: Number(v.toFixed(2)) })}
-            hint="0 与 1 处逐位等于两端原图；中间态永远是闭合曲线。"
+            hint={t('0 与 1 处逐位等于两端原图；中间态永远是闭合曲线。')}
           />
         </>
       )}

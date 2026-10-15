@@ -1,5 +1,6 @@
 import type { PerNParam, Scene, Theta } from '../core/types.js'
 import { fmt } from '../core/series.js'
+import { useT } from '../i18n/context.js'
 import { Range } from './Range.js'
 
 const PI = Math.PI
@@ -20,6 +21,7 @@ export function TermEditor({
   perN: Theta['perN']
   onPerN: (n: number, patch: Partial<PerNParam>) => void
 }) {
+  const t = useT()
   const term = scene.terms.find((t) => t.n === n) ?? null
   const p = perN[String(n)] ?? {}
   const s = p.s ?? 1
@@ -27,27 +29,31 @@ export function TermEditor({
   const off = p.off ?? false
 
   return (
-    <section aria-label={`编辑频率 n=${n}`} className="border-t border-clay/30 pt-4" data-testid="term-editor">
+    <section
+      aria-label={t('编辑频率 n={n}', { n })}
+      className="border-t border-clay/30 pt-4"
+      data-testid="term-editor"
+    >
       <div className="mb-2 flex items-baseline justify-between">
-        <h2 className="text-sm text-clay">编辑 n={n}</h2>
+        <h2 className="text-sm text-clay">{t('编辑频率 n={n}', { n })}</h2>
         <button
           type="button"
           onClick={() => onPerN(n, { s: undefined, dphi: undefined, off: undefined })}
           className="text-xs text-mist/50 hover:text-clay"
         >
-          清除
+          {t('清除')}
         </button>
       </div>
       {term ? (
         <p className="mb-2 text-xs text-mist/45">
-          半径 {fmt(term.radius)}，相位 {(term.phase * 180 / PI).toFixed(1)}°
+          {t('半径 {r}，相位 {deg}°', { r: fmt(term.radius), deg: (term.phase * 180 / PI).toFixed(1) })}
         </p>
       ) : (
-        <p className="mb-2 text-xs text-mist/45">该频率已被隐藏或过滤，调高倍率可恢复。</p>
+        <p className="mb-2 text-xs text-mist/45">{t('该频率已被隐藏或过滤，调高倍率可恢复。')}</p>
       )}
       <div className="flex flex-col gap-3">
         <Range
-          label="幅度倍率 γ"
+          label={t('幅度倍率 γ')}
           value={s}
           min={0}
           max={3}
@@ -55,7 +61,7 @@ export function TermEditor({
           onChange={(v) => onPerN(n, { s: Number(v.toFixed(2)) })}
         />
         <Range
-          label="相位偏移 Δφ (弧度)"
+          label={t('相位偏移 Δφ (弧度)')}
           value={dphi}
           min={-PI}
           max={PI}
@@ -69,7 +75,7 @@ export function TermEditor({
             onChange={(e) => onPerN(n, { off: e.target.checked || undefined })}
             className="accent-sage"
           />
-          <span className="text-mist/70">隐藏此项</span>
+          <span className="text-mist/70">{t('隐藏此项')}</span>
         </label>
       </div>
     </section>

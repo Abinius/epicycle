@@ -1,5 +1,6 @@
 import { fmt } from '../core/series.js'
 import { type Spectrum, type SpectrumBin } from '../core/spectrum.js'
+import { useT } from '../i18n/context.js'
 
 /**
  * 振幅频谱（PRD A9）：自绘柱状图，横轴是有符号频率 n，柱高是 |c_n|。
@@ -24,9 +25,12 @@ function Bar({
   selected: boolean
   onSelect: (index: number | null) => void
 }) {
+  const t = useT()
   if (bin.magnitude <= 0) return <span aria-hidden className={`min-w-0 flex-1 ${SLOT_MAX_WIDTH}`} />
 
-  const label = `频率 n=${bin.n}，振幅 ${fmt(bin.magnitude)}，${bin.row === null ? '被项数截断' : `参与（系数表第 ${bin.row + 1} 项）`}`
+  const rest =
+    bin.row === null ? t('被项数截断') : t('参与（系数表第 {i} 项）', { i: bin.row + 1 })
+  const label = t('频率 n={n}，振幅 {mag}，{rest}', { n: bin.n, mag: fmt(bin.magnitude), rest })
   const height = Math.max(MIN_BAR_HEIGHT, (bin.magnitude / peak) * 100)
   const color = selected ? 'bg-clay' : bin.row === null ? 'bg-mist/20' : 'bg-sage'
   const bar = <span className={`block w-[calc(100%-1px)] ${color}`} style={{ height: `${height}%` }} />
@@ -64,18 +68,19 @@ export function SpectrumPanel({
   highlight: number | null
   onSelect: (index: number | null) => void
 }) {
+  const t = useT()
   const { negative, positive, top, maxAn, frequencies, peak } = spectrum
   const empty = top <= 0
 
   return (
-    <section aria-label="振幅频谱" className="border-t border-hairline pt-4">
+    <section aria-label={t('振幅频谱')} className="border-t border-hairline pt-4">
       <div className="mb-2 flex items-baseline justify-between gap-2">
-        <h2 className="text-sm text-mist/70">频谱</h2>
-        <span className="font-mono text-xs tabular-nums text-mist/40">峰值 {fmt(peak)}</span>
+        <h2 className="text-sm text-mist/70">{t('频谱')}</h2>
+        <span className="font-mono text-xs tabular-nums text-mist/40">{t('峰值 {v}', { v: fmt(peak) })}</span>
       </div>
 
       {empty ? (
-        <p className="text-xs leading-relaxed text-mist/40">这个形状没有可参与的频率。</p>
+        <p className="text-xs leading-relaxed text-mist/40">{t('这个形状没有可参与的频率。')}</p>
       ) : (
         <>
           <div className="flex h-16 justify-center border-b border-hairline">
@@ -95,12 +100,11 @@ export function SpectrumPanel({
           </div>
 
           <p className="mt-2 text-xs leading-relaxed text-mist/40">
-            左半轴 −n 反向旋转，右半轴 +n 正向旋转，柱高是 |c_n|。亮色是当前参与的项，暗色被项数 K 截断；
-            点一根柱，画面只画到它为止。
+            {t('左半轴 −n 反向旋转，右半轴 +n 正向旋转，柱高是 |c_n|。亮色是当前参与的项，暗色被项数 K 截断；点一根柱，画面只画到它为止。')}
           </p>
           {maxAn > top ? (
             <p className="mt-1 text-xs text-mist/35">
-              共 {frequencies} 个非零系数，这里显示 |n| ≤ {top} 的部分。
+              {t('共 {n} 个非零系数，这里显示 |n| ≤ {top} 的部分。', { n: frequencies, top })}
             </p>
           ) : null}
         </>

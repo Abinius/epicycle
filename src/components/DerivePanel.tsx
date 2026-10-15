@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { isIdentityTransform, transformLabel, type ShapeTransform } from '../core/derive.js'
+import { useLang } from '../i18n/context.js'
+import { translateTransformLabel } from '../i18n/dict.js'
 import { Range } from './Range.js'
 
 const PI = Math.PI
@@ -42,22 +44,30 @@ export function DerivePanel({
   busy: boolean
   onDerive: (t: ShapeTransform) => void
 }) {
+  const { lang, t } = useLang()
   const [s, setS] = useState<DeriveState>(DEFAULTS)
-  const t = toTransform(s)
-  const identity = isIdentityTransform(t)
+  const transform = toTransform(s)
+  const identity = isIdentityTransform(transform)
 
   return (
-    <section aria-label="形状变形" className="flex flex-col gap-3 border-t border-hairline pt-4">
+    <section aria-label={t('形状变形')} className="flex flex-col gap-3 border-t border-hairline pt-4">
       <div className="flex items-baseline justify-between">
-        <h2 className="text-sm text-mist/70">变形</h2>
+        <h2 className="text-sm text-mist/70">{t('变形')}</h2>
         <button type="button" onClick={() => setS(DEFAULTS)} className="text-xs text-mist/40 hover:text-mist">
-          复位
+          {t('复位')}
         </button>
       </div>
 
-      <Range label="旋转 (°)" value={s.deg} min={-180} max={180} step={1} onChange={(v) => setS((c) => ({ ...c, deg: v }))} />
       <Range
-        label="宽度"
+        label={t('旋转 (°)')}
+        value={s.deg}
+        min={-180}
+        max={180}
+        step={1}
+        onChange={(v) => setS((c) => ({ ...c, deg: v }))}
+      />
+      <Range
+        label={t('宽度')}
         value={s.scaleX}
         min={0.2}
         max={3}
@@ -65,7 +75,7 @@ export function DerivePanel({
         onChange={(v) => setS((c) => ({ ...c, scaleX: Number(v.toFixed(2)) }))}
       />
       <Range
-        label="高度"
+        label={t('高度')}
         value={s.scaleY}
         min={0.2}
         max={3}
@@ -73,13 +83,13 @@ export function DerivePanel({
         onChange={(v) => setS((c) => ({ ...c, scaleY: Number(v.toFixed(2)) }))}
       />
       <Range
-        label="剪切"
+        label={t('剪切')}
         value={s.shear}
         min={-1}
         max={1}
         step={0.05}
         onChange={(v) => setS((c) => ({ ...c, shear: Number(v.toFixed(2)) }))}
-        hint="非解析变换：真的改变频谱结构，不是在系数上做乘法。"
+        hint={t('非解析变换：真的改变频谱结构，不是在系数上做乘法。')}
       />
       <div className="flex gap-4">
         <label className="flex items-center gap-2 text-sm">
@@ -89,7 +99,7 @@ export function DerivePanel({
             onChange={(e) => setS((c) => ({ ...c, mirrorX: e.target.checked }))}
             className="accent-sage"
           />
-          <span className="text-mist/70">镜像 x</span>
+          <span className="text-mist/70">{t('镜像 x')}</span>
         </label>
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -98,7 +108,7 @@ export function DerivePanel({
             onChange={(e) => setS((c) => ({ ...c, mirrorY: e.target.checked }))}
             className="accent-sage"
           />
-          <span className="text-mist/70">镜像 y</span>
+          <span className="text-mist/70">{t('镜像 y')}</span>
         </label>
       </div>
 
@@ -106,13 +116,17 @@ export function DerivePanel({
         type="button"
         data-testid="derive-btn"
         disabled={busy || identity}
-        onClick={() => onDerive(t)}
+        onClick={() => onDerive(transform)}
         className="rounded-md border border-hairline bg-ink2 px-3 py-1.5 text-sm hover:border-sage/60 disabled:opacity-40"
       >
-        {busy ? '计算中…' : identity ? '调一个参数再派生' : `派生为「${transformLabel(t)}」`}
+        {busy
+          ? t('计算中…')
+          : identity
+            ? t('调一个参数再派生')
+            : t('派生为「{label}」', { label: translateTransformLabel(lang, transformLabel(transform)) })}
       </button>
       <p className="text-xs leading-relaxed text-mist/35">
-        从「{from}」出发，算完存成一份新资产；原来的形状一字不改。
+        {t('从「{from}」出发，算完存成一份新资产；原来的形状一字不改。', { from })}
       </p>
     </section>
   )

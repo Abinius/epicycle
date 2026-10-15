@@ -22,6 +22,8 @@
 - **C2 · 数值重演**：以冻结资产为基底，把数值注入参数向量 θ 实时重演。三个层级：全局参数 / 单系数编辑 / 任意数字序列映射。
 - **C3 · 导出**：WebCodecs + mp4-muxer 逐帧离屏渲染，导出的每一帧与预览逐帧一致。
 
+此外：中英双语可切换、全键盘可操作（空格 / ↑↓ / ←→ / F / E，输入框里会让路）、320px 起的移动端可用、渲染异常有兜底错误页——全部仍然只在你的浏览器里跑。
+
 ## 现在做到哪了
 
 | 里程碑 | 内容 | 状态 |
@@ -32,7 +34,8 @@
 | M3 | 公式面板（KaTeX 代入式）+ 系数表 + 频谱 + 六个预置 | ✅ |
 | M4 | C2 算子引擎（模式 X / L1 / L2 / 分享短码 / 模式 Y 派生 / Morph） | ✅ |
 | M5 | C3 导出引擎（WebCodecs 出 MP4 + 降级链 + GIF / PNG 序列 + 导出面板） | ✅ |
-| M6 | 打磨与上线（移动端 / 无障碍 / 中英双语 / 部署） | ⬜ |
+| M6 | 打磨与上线（移动端 320px / 无障碍与键盘 / 中英双语 / 隐私页 / L3 序列注入） | ✅ |
+| M6′ | 部署（配置已就绪 `vercel.json`，实际上线待域名与账号） | 🚧 |
 
 ## 快速开始
 
@@ -50,11 +53,11 @@ Node 24（CI 用的版本）。Windows 上如果 vitest 起不来并报 `Cannot 
 | `npm run typecheck` | `tsc --noEmit`，strict + `verbatimModuleSyntax` + `isolatedModules` |
 | `npm run lint` | ESLint，**含「`core/` 不许 import 浏览器 API」这条架构约束** |
 | `npm test` / `npm run coverage` | 单元测试 + 数值黄金样张 V-1…V-6；覆盖率阈值 90 / 85 / 90 / 90 |
-| `npm run build` | 构建 + 首屏 gzip ≤ 300 KB |
+| `npm run build` | 构建 + 体积门禁：`dist/assets` 下**全部** js+css 的 gzip 之和 ≤ 300 KB（CI 口径，含懒加载 chunk 与 worker） |
 | `npm run e2e` | Playwright 端到端（本机浏览器通道不通时用 `PLAYWRIGHT_CHANNEL=msedge npm run e2e`） |
 | `npm run check` | 上面四条串起来跑，CI 就是这四步再加 E2E |
 
-**2026-10-15 实测**：270 个单测全绿，覆盖率 stmts 98.96 / branch 93.26 / funcs 100 / lines 99.32；首屏 gzip 约 104 KB（预算 300 KB；导出用的 mp4-muxer / gifenc / fflate 是独立 chunk，点了导出才下载）；Playwright 16 例通过。这些数字会随开发变动，以 CI 为准。
+**2026-10-15 实测**：289 个单测全绿，覆盖率 stmts 98.94 / branch 93 / funcs 100 / lines 99.36；Playwright 30 例通过。体积两个口径都给，免得跟 CI 对不上号——**真首屏**（主入口 + CSS）**≈115 KB**，**CI 口径**（`dist/assets` 全部 js+css 的 gzip 之和，含懒加载的 KaTeX、导出链路与 Worker）**≈224 KB**，预算 300 KB。这些数字会随开发变动，以 CI 为准。
 
 ## 三条不可动摇的架构约束
 
@@ -78,14 +81,16 @@ src/
 │   ├── derive.ts      模式 Y 形状域派生：coeffs → 重建 → 几何变换 → 重 DFT → 派生资产
 │   ├── morph.ts       双资产过渡：逐项线性插值 cₙ(w)，两端与公共网格
 │   ├── export.ts      导出规划层（纯函数）：能力 → 降级链、时间轴、文件名、体积预估
+│   ├── sequence.ts    L3 数值序列注入：一串数字 → 幅度槽 / 相位槽（线性 + 固定增益）
 │   ├── strokes.ts     手绘笔迹 → SVG path 数据
 │   ├── formulas.ts    解析生成器（圆 / 正方形 / 心形 / 星形）
 │   └── presets.ts     六个预置（生成器 + 两条内建路径），与上传共用同一个采样器
 ├── engine/        与浏览器交互的那一层
 │   ├── worker.ts      采样 + DFT + 模式 Y 派生跑在 Worker 里（Transferable、轮次丢包）
-│   ├── useSvgWorker.ts
-│   ├── useDeriveWorker.ts
+│   ├── useSvgWorker.ts / useDeriveWorker.ts
+│   ├── useShortcuts.ts / useReducedMotion.ts / metrics.ts   键盘、降低运动量、本地性能留档
 │   └── export/        四条导出通路（WebCodecs / MediaRecorder / GIF / PNG 序列）+ 能力探测
+├── i18n/          中英双语：以中文原文为 key 的词典 + 诊断按编号映射
 ├── storage/       IndexedDB 资产库（只管存取，不碰资产语义）
 └── components/    UI（自绘面板 + Tailwind，不引 UI 组件库）
 ```
@@ -109,6 +114,21 @@ src/
 - `傅里叶画板_技术栈与开发文档_v2.md` —— 架构 / 数学管线 / 资产模型 / 渲染 / 导出 / 错误诊断表
 
 代码里引用它们时写作 `技术文档 §2.2` 这样的形式。
+
+## 部署
+
+纯静态站：`npm run build` 出 `dist/`，任何静态托管都能放。仓库里带了 `vercel.json`，包含 SPA 重写（分享链接 `?a=&t=` 与深链都落到 `index.html`）、安全响应头（CSP、`nosniff`、`DENY`、`no-referrer`）与静态资源长缓存。
+
+```bash
+vercel --prod     # 首次会要求登录并关联项目
+```
+
+⚠️ **CSP 在两处生效，但只有一个出处**：生产看 `vercel.json`；本地 E2E 跑的是 `vite preview`，它从 `vercel.json` 里读同一份 CSP 当响应头（见 `vite.config.ts`）。因此 E2E 里每条「无 console error」断言都顺带验了 CSP——**改 CSP 只改 `vercel.json`**，两边不会走岔。
+
+两条实测出来的 CSP 约束，别顺手收紧：
+
+- `font-src` 必须带 `data:`——KaTeX 的字体里有一个小到构建时被内联成 data URI。
+- `style-src` 必须带 `'unsafe-inline'`——KaTeX 大量用 `style` 属性排版，去掉会挂掉 13 条 E2E。
 
 ## 许可证
 

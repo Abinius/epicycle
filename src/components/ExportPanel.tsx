@@ -15,6 +15,8 @@ import {
 import type { Scene } from '../core/types.js'
 import { detectCaps } from '../engine/export/detect.js'
 import { exportAnimation } from '../engine/export/index.js'
+import { recordMetric } from '../engine/metrics.js'
+import { useT } from '../i18n/context.js'
 import { Range } from './Range.js'
 
 const SELECT = 'border border-hairline bg-ink2 px-2 py-1 text-xs'
@@ -24,7 +26,7 @@ type AspectId = '16:9' | '1:1' | '4:3' | '9:16'
 const ASPECTS: Record<AspectId, number> = { '16:9': 16 / 9, '1:1': 1, '4:3': 4 / 3, '9:16': 9 / 16 }
 
 const FORMATS: Array<{ id: ExportFormat; label: string }> = [
-  { id: 'mp4', label: 'MP4（H.264）' },
+  { id: 'mp4', label: 'MP4 (H.264)' },
   { id: 'webm', label: 'WebM' },
   { id: 'gif', label: 'GIF' },
   { id: 'png', label: 'PNG 序列（ZIP）' },
@@ -46,9 +48,10 @@ interface Settings {
   bitrateMbps: number
 }
 
-const DEFAULTS: Settings = {
+/** 默认值。窄屏把分辨率降到 720p：手机上导 1080p 又慢又占地方（PRD §6 交互规则 4） */
+const DEFAULTS = (): Settings => ({
   format: 'mp4',
-  tier: 1080,
+  tier: window.innerWidth < 768 ? 720 : 1080,
   aspect: '16:9',
   fps: 30,
   loops: 2,
@@ -57,7 +60,7 @@ const DEFAULTS: Settings = {
   circles: 'all',
   manualBitrate: false,
   bitrateMbps: 5,
-}
+})
 
 /**
  * C3 导出面板（PRD §5.3）。导出的不是「录屏」，而是当前这份场景快照——
@@ -82,6 +85,7 @@ export function ExportPanel({
   /** 文件名主干用的形状名 */
   name: string
 }) {
+  const t = useT()
   const [s, setS] = useState<Settings>(DEFAULTS)
   const [caps, setCaps] = useState<Caps | null>(null)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
@@ -133,14 +137,16 @@ export function ExportPanel({
   const onExport = async () => {
     setMessage(null)
     setProgress({ done: 0, total })
+    const t0 = Date.now()
     try {
       const r = await exportAnimation(scene, opt, {
         // 逐帧 setState 会把导出拖慢，按 8 帧节流一次即可
-        onProgress: (done, t) => {
-          if (done === t || done % 8 === 0) setProgress({ done, total: t })
+        onProgress: (done, total2) => {
+          if (done === total2 || done % 8 === 0) setProgress({ done, total: total2 })
         },
       })
       const url = URL.createObjectURL(r.blob)
+      recordMetric('export', Date.now() - t0)
       const a = document.createElement('a')
       a.href = url
       a.download = r.fileName
@@ -148,30 +154,47 @@ export function ExportPanel({
       // 立刻撤销会让 Firefox 拿不到内容，等一拍再放
       setTimeout(() => URL.revokeObjectURL(url), 1000)
       setMessage(
-        `已导出 ${r.fileName}（${formatBytes(r.blob.size)}，${r.frames} 帧）${r.plan.note ? ` · ${r.plan.note}` : ''}`,
+        t('已导出 {name}（{size}，{frames} 帧）{note}', {
+          name: r.fileName,
+          size: formatBytes(r.blob.size),
+          frames: r.frames,
+          // 降级说明由 core 出中文，走同一套词典翻（固定文案，直接当 key）
+          note: r.plan.note ? ` · ${t(r.plan.note)}` : '',
+        }),
       )
     } catch (e) {
-      setMessage(`导出失败：${e instanceof Error ? e.message : String(e)}`)
+      setMessage(t('导出失败：{msg}', { msg: e instanceof Error ? e.message : String(e) }))
     } finally {
       setProgress(null)
     }
   }
 
   return (
-    <section aria-label="导出" className="flex flex-col gap-3 border-t border-hairline pt-4">
+    <section
+      id="panel-export"
+      tabIndex={-1}
+      aria-label={t('导出')}
+      data-testid="export-panel"
+      className="flex flex-col gap-3 border-t border-hairline pt-4"
+    >
       <div className="flex items-baseline justify-between">
-        <h2 className="text-sm text-mist/70">导出</h2>
-        <button type="button" onClick={() => setS(DEFAULTS)} className="text-xs text-mist/40 hover:text-mist">
-          复位
+        <h2 className="text-sm text-mist/70">{t('导出')}</h2>
+        <button type="button" onClick={() => setS(DEFAULTS())} className="text-xs text-mist/40 hover:text-mist">
+          {t('复位')}
         </button>
       </div>
 
       <label className="flex flex-col gap-1 text-sm">
-        <span className="text-mist/70">格式</span>
-        <select aria-label="导出格式" className={SELECT} value={s.format} onChange={(e) => patch({ format: e.target.value as ExportFormat })}>
+        <span className="text-mist/70">{t('格式')}</span>
+        <select
+          aria-label={t('导出格式')}
+          className={SELECT}
+          value={s.format}
+          onChange={(e) => patch({ format: e.target.value as ExportFormat })}
+        >
           {FORMATS.map((f) => (
             <option key={f.id} value={f.id}>
-              {f.label}
+              {t(f.label)}
             </option>
           ))}
         </select>
@@ -179,16 +202,26 @@ export function ExportPanel({
 
       <div className="flex gap-2">
         <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
-          <span className="text-mist/70">分辨率</span>
-          <select aria-label="分辨率" className={SELECT} value={s.tier} onChange={(e) => patch({ tier: Number(e.target.value) as Tier })}>
+          <span className="text-mist/70">{t('分辨率')}</span>
+          <select
+            aria-label={t('分辨率')}
+            className={SELECT}
+            value={s.tier}
+            onChange={(e) => patch({ tier: Number(e.target.value) as Tier })}
+          >
             <option value={720}>720p</option>
             <option value={1080}>1080p</option>
             <option value={2160}>4K</option>
           </select>
         </label>
         <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
-          <span className="text-mist/70">比例</span>
-          <select aria-label="比例" className={SELECT} value={s.aspect} onChange={(e) => patch({ aspect: e.target.value as AspectId })}>
+          <span className="text-mist/70">{t('比例')}</span>
+          <select
+            aria-label={t('比例')}
+            className={SELECT}
+            value={s.aspect}
+            onChange={(e) => patch({ aspect: e.target.value as AspectId })}
+          >
             {(Object.keys(ASPECTS) as AspectId[]).map((a) => (
               <option key={a} value={a}>
                 {a}
@@ -200,8 +233,8 @@ export function ExportPanel({
 
       <div className="flex gap-2">
         <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
-          <span className="text-mist/70">帧率</span>
-          <select aria-label="帧率" className={SELECT} value={s.fps} onChange={(e) => patch({ fps: Number(e.target.value) })}>
+          <span className="text-mist/70">{t('帧率')}</span>
+          <select aria-label={t('帧率')} className={SELECT} value={s.fps} onChange={(e) => patch({ fps: Number(e.target.value) })}>
             {[24, 30, 60].map((f) => (
               <option key={f} value={f}>
                 {f}
@@ -210,8 +243,13 @@ export function ExportPanel({
           </select>
         </label>
         <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
-          <span className="text-mist/70">循环数</span>
-          <select aria-label="循环数" className={SELECT} value={s.loops} onChange={(e) => patch({ loops: Number(e.target.value) })}>
+          <span className="text-mist/70">{t('循环数')}</span>
+          <select
+            aria-label={t('循环数')}
+            className={SELECT}
+            value={s.loops}
+            onChange={(e) => patch({ loops: Number(e.target.value) })}
+          >
             {[1, 2, 3].map((n) => (
               <option key={n} value={n}>
                 {n}
@@ -222,38 +260,38 @@ export function ExportPanel({
       </div>
 
       <Range
-        label="首尾留白 (秒)"
+        label={t('首尾留白 (秒)')}
         value={s.padSeconds}
         min={0}
         max={2}
         step={0.25}
         onChange={(v) => patch({ padSeconds: v })}
-        hint="留白是静止帧，不进入时间循环——视频首尾同帧，回看时无缝。"
+        hint={t('留白是静止帧，不进入时间循环——视频首尾同帧，回看时无缝。')}
       />
 
       <div className="flex gap-2">
         <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
-          <span className="text-mist/70">背景</span>
+          <span className="text-mist/70">{t('背景')}</span>
           <select
-            aria-label="背景"
+            aria-label={t('背景')}
             className={SELECT}
             value={s.transparent ? 'clear' : 'paper'}
             onChange={(e) => patch({ transparent: e.target.value === 'clear' })}
           >
-            <option value="paper">纸白</option>
-            <option value="clear">透明</option>
+            <option value="paper">{t('纸白')}</option>
+            <option value="clear">{t('透明')}</option>
           </select>
         </label>
         <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
-          <span className="text-mist/70">画笔</span>
+          <span className="text-mist/70">{t('画笔')}</span>
           <select
-            aria-label="画笔"
+            aria-label={t('画笔')}
             className={SELECT}
             value={s.circles}
             onChange={(e) => patch({ circles: e.target.value as Settings['circles'] })}
           >
-            <option value="all">圆链全显</option>
-            <option value="none">无圆链</option>
+            <option value="all">{t('圆链全显')}</option>
+            <option value="none">{t('无圆链')}</option>
           </select>
         </label>
       </div>
@@ -265,11 +303,11 @@ export function ExportPanel({
           onChange={(e) => patch({ manualBitrate: e.target.checked })}
           className="accent-sage"
         />
-        <span className="text-mist/70">手动码率</span>
+        <span className="text-mist/70">{t('手动码率')}</span>
       </label>
       {s.manualBitrate && (
         <Range
-          label="码率 (Mbps)"
+          label={t('码率 (Mbps)')}
           value={s.bitrateMbps}
           min={1}
           max={20}
@@ -280,32 +318,34 @@ export function ExportPanel({
 
       <dl data-testid="export-estimate" className="flex flex-col gap-0.5 text-xs text-mist/50">
         <div className="flex justify-between">
-          <dt>画幅</dt>
+          <dt>{t('画幅')}</dt>
           <dd className="font-mono tabular-nums">
             {eff.width} × {eff.height}
           </dd>
         </div>
         <div className="flex justify-between">
-          <dt>帧数 / 时长</dt>
+          <dt>{t('帧数 / 时长')}</dt>
           <dd className="font-mono tabular-nums">
-            {total} 帧 · {(total / eff.fps).toFixed(1)} 秒
+            {t('{frames} 帧 · {sec} 秒', { frames: total, sec: (total / eff.fps).toFixed(1) })}
           </dd>
         </div>
         <div className="flex justify-between">
-          <dt>预估体积</dt>
+          <dt>{t('预估体积')}</dt>
           <dd data-testid="export-bytes" className="font-mono tabular-nums">
-            {plan ? `约 ${formatBytes(estimate)}` : '探测中…'}
+            {plan ? t('约 {size}', { size: formatBytes(estimate) }) : t('探测中…')}
           </dd>
         </div>
       </dl>
 
       {plan?.note && (
         <p data-testid="export-note" className="text-xs leading-relaxed text-clay">
-          {plan.note}
+          {t(plan.note)}
         </p>
       )}
 
-      <p className="text-xs leading-relaxed text-mist/35">文件名：{NAME_HINT}</p>
+      <p className="text-xs leading-relaxed text-mist/35">
+        {t('文件名')}：{t(NAME_HINT)}
+      </p>
 
       <button
         type="button"
@@ -316,7 +356,7 @@ export function ExportPanel({
         }}
         className="rounded-md border border-hairline bg-ink2 px-3 py-1.5 text-sm hover:border-sage/60 disabled:opacity-40"
       >
-        {progress ? `导出中 ${progress.done}/${progress.total}` : '导出'}
+        {progress ? t('导出中 {done}/{total}', progress) : t('导出')}
       </button>
 
       {message && (

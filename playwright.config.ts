@@ -9,6 +9,9 @@ export default defineConfig({
   reporter: 'list',
   use: {
     baseURL: 'http://127.0.0.1:4173',
+    // 界面语言默认跟随浏览器。既有用例断言的全是中文文案，因此这里固定中文语区；
+    // 英文界面由 i18n 那条用例自己切过去验。
+    locale: 'zh-CN',
     trace: 'retain-on-failure',
     ...(process.env.PLAYWRIGHT_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHANNEL } : {}),
   },

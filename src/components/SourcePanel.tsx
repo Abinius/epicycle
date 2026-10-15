@@ -1,5 +1,6 @@
 import type { Diagnostic } from '../core/diagnostic.js'
 import type { Stroke } from '../core/strokes.js'
+import { useT } from '../i18n/context.js'
 import { DiagnosticList } from './DiagnosticList.js'
 import { DrawCanvas } from './DrawCanvas.js'
 
@@ -50,15 +51,16 @@ export function SourcePanel({
   onClear: () => void
   onChange: (patch: Partial<SourceOptions>) => void
 }) {
+  const t = useT()
   const hasSource = tab === 'svg' ? file !== null : strokes.length > 0
 
   return (
-    <section aria-label="素材来源" className="flex flex-col gap-3">
+    <section aria-label={t('素材来源')} className="flex flex-col gap-3">
       <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-sm text-mist/70">素材</h2>
+        <h2 className="text-sm text-mist/70">{t('素材')}</h2>
         {tab === 'svg' && file ? (
           <button type="button" onClick={onClear} className="text-xs text-mist/40 hover:text-mist">
-            清除上传
+            {t('清除上传')}
           </button>
         ) : null}
       </div>
@@ -72,7 +74,7 @@ export function SourcePanel({
             onClick={() => onTab(id)}
             className={`${TAB} ${tab === id ? 'border-sage bg-ink2 text-mist' : 'border-hairline text-mist/50 hover:border-sage/60'}`}
           >
-            {id === 'svg' ? '上传 SVG' : '手绘'}
+            {t(id === 'svg' ? '上传 SVG' : '手绘')}
           </button>
         ))}
       </div>
@@ -83,7 +85,7 @@ export function SourcePanel({
             <input
               type="file"
               accept=".svg,image/svg+xml,text/plain"
-              aria-label="上传 SVG 文件"
+              aria-label={t('上传 SVG 文件')}
               className="sr-only"
               onChange={(e) => {
                 const picked = e.target.files?.[0]
@@ -91,17 +93,17 @@ export function SourcePanel({
                 e.target.value = '' // 同一个文件再选一次也要触发
               }}
             />
-            {file ? '换一个 SVG' : '上传 SVG'}
+            {t(file ? '换一个 SVG' : '上传 SVG')}
           </label>
 
           {file ? (
             <p className="truncate text-xs text-mist/50" title={file.name}>
-              {file.name} · {paths} 条 path
-              {subpaths === null ? '' : ` · ${subpaths} 段折线`}
+              {t('{name} · {n} 条 path', { name: file.name, n: paths })}
+              {subpaths === null ? '' : t(' · {n} 段折线', { n: subpaths })}
             </p>
           ) : (
             <p className="text-xs leading-relaxed text-mist/40">
-              上传含 &lt;path&gt; 的 SVG；直接把路径数据（以 M 开头）存成 .svg 或 .txt 也能用。
+              {t('上传含 <path> 的 SVG；直接把路径数据（以 M 开头）存成 .svg 或 .txt 也能用。')}
             </p>
           )}
         </>
@@ -109,15 +111,15 @@ export function SourcePanel({
         <DrawCanvas strokes={strokes} onChange={onStrokes} />
       )}
 
-      {blocked ? <p className="text-xs text-clay">预检未通过，画面仍是当前预置形状。</p> : null}
+      {blocked ? <p className="text-xs text-clay">{t('预检未通过，画面仍是当前预置形状。')}</p> : null}
 
       {hasSource ? (
         <>
           <div className="grid grid-cols-2 gap-2">
             <label className="flex flex-col gap-1 text-xs">
-              <span className="text-mist/50">采样点数 N</span>
+              <span className="text-mist/50">{t('采样点数 N')}</span>
               <select
-                aria-label="采样点数 N"
+                aria-label={t('采样点数 N')}
                 value={options.N}
                 onChange={(e) => onChange({ N: Number(e.target.value) })}
                 className={SELECT}
@@ -130,15 +132,15 @@ export function SourcePanel({
               </select>
             </label>
             <label className="flex flex-col gap-1 text-xs">
-              <span className="text-mist/50">闭合方式</span>
+              <span className="text-mist/50">{t('闭合方式')}</span>
               <select
-                aria-label="闭合方式"
+                aria-label={t('闭合方式')}
                 value={options.close_mode}
                 onChange={(e) => onChange({ close_mode: e.target.value as SourceOptions['close_mode'] })}
                 className={SELECT}
               >
-                <option value="join">直线闭合</option>
-                <option value="mirror">镜像回扫</option>
+                <option value="join">{t('直线闭合')}</option>
+                <option value="mirror">{t('镜像回扫')}</option>
               </select>
             </label>
           </div>
@@ -149,7 +151,7 @@ export function SourcePanel({
               onChange={(e) => onChange({ longest_only: e.target.checked })}
               className="accent-sage"
             />
-            只取最长子路径
+            {t('只取最长子路径')}
           </label>
         </>
       ) : null}

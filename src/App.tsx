@@ -3,8 +3,10 @@ import { AssetPanel, type Frozen } from './components/AssetPanel.js'
 import { DerivePanel } from './components/DerivePanel.js'
 import { ExportPanel } from './components/ExportPanel.js'
 import { FourierStage } from './components/FourierStage.js'
+import { HelpDialog } from './components/HelpDialog.js'
 import { MorphPanel, type MorphState } from './components/MorphPanel.js'
 import { SourcePanel, type SourceOptions, type SourceTab } from './components/SourcePanel.js'
+import { SequencePanel } from './components/SequencePanel.js'
 import { SpectrumPanel } from './components/SpectrumPanel.js'
 import { TermEditor } from './components/TermEditor.js'
 import { ValuePanel } from './components/ValuePanel.js'
@@ -20,7 +22,11 @@ import { decodeShare, encodeShare } from './core/share.js'
 import { strokesToPath, type Stroke } from './core/strokes.js'
 import { defaultTheta, type Coefficient, type FourierAsset, type PerNParam, type Theta } from './core/types.js'
 import { useDeriveWorker } from './engine/useDeriveWorker.js'
+import { recordMetric } from './engine/metrics.js'
+import { useReducedMotion } from './engine/useReducedMotion.js'
+import { SHORTCUT_HINTS, useShortcuts } from './engine/useShortcuts.js'
 import { useSvgWorker } from './engine/useSvgWorker.js'
+import { useLang } from './i18n/context.js'
 import { deleteAsset, listAssets, saveAsset, storageDiagnostic } from './storage/assets.js'
 
 // KaTeX 随本 chunk 一起加载，不进首屏；懒加载期间显示占位块
@@ -59,6 +65,7 @@ function readShared(): { coeffs: Coefficient[]; theta: Theta } | null {
 }
 
 export default function App() {
+  const { lang, setLang, t } = useLang()
   const [preset, setPreset] = useState<PresetId>('heart')
   const initialShared = readShared()
   const [shared, setShared] = useState<{ coeffs: Coefficient[]; theta: Theta } | null>(initialShared)
@@ -82,6 +89,8 @@ export default function App() {
   const [copied, setCopied] = useState(false)
   const [deriving, setDeriving] = useState(false)
   const derive = useDeriveWorker()
+  const [reduced, setReduced] = useReducedMotion()
+  const [help, setHelp] = useState(false)
 
   const patch = (p: Partial<Theta>) => setTheta((t) => ({ ...t, ...p }))
   const reset = () => {
@@ -105,6 +114,11 @@ export default function App() {
   const drawPath = useMemo(() => strokesToPath(strokes), [strokes])
   const shapeText = opened ? null : (activeFile?.text ?? (tab === 'draw' ? drawPath || null : null))
   const prepared = useSvgWorker(shapeText, opts)
+
+  // 每次 Worker 交回新的采样结果就留一条 DFT 耗时（§11 的本地性能留档，不出这台机器）
+  useEffect(() => {
+    if (prepared && prepared.dft_ms > 0) recordMetric('dft', prepared.dft_ms)
+  }, [prepared])
 
   // diagnose 便宜且依赖 K，留在主线程：拖 K 不再触发采样与 DFT
   const read = useMemo(() => {
@@ -148,7 +162,7 @@ export default function App() {
   const origin = useMemo<Origin>(() => {
     if (morph && morphEnds && morphPlan) {
       return {
-        name: `过渡 ${morphEnds.A.name} → ${morphEnds.B.name}`,
+        name: t('过渡 {a} → {b}', { a: morphEnds.A.name, b: morphEnds.B.name }),
         coeffs: morphCoeffs(morphPlan, morph.w),
         bounds: morphBounds(morphPlan, morph.w),
         dft_ms: 0,
@@ -160,7 +174,7 @@ export default function App() {
       // 重建点数取这组系数所属的网格：填小了会把 n 与 n∓N 折叠到一起
       const N = gridFor(shared.coeffs)
       return {
-        name: '分享链接',
+        name: t('分享链接'),
         coeffs: shared.coeffs,
         bounds: boundsOf(shared.coeffs, reconstructPoints(shared.coeffs, N)),
         dft_ms: 0,
@@ -181,7 +195,7 @@ export default function App() {
     const sample = prepared?.sample
     if (readOk && sample && prepared?.coeffs) {
       return {
-        name: activeFile?.name ?? '手绘',
+        name: activeFile?.name ?? t('手绘'),
         coeffs: prepared.coeffs,
         bounds: boundsOf(prepared.coeffs, sample.points),
         dft_ms: prepared.dft_ms,
@@ -204,7 +218,7 @@ export default function App() {
       },
       source: { type: 'preset', preset, subpaths: presetData.sample.subpaths },
     }
-  }, [morph, morphEnds, morphPlan, shared, opened, readOk, prepared, activeFile, opts.close_mode, preset, presetData])
+  }, [t, morph, morphEnds, morphPlan, shared, opened, readOk, prepared, activeFile, opts.close_mode, preset, presetData])
 
   const scene = useMemo(() => buildScene(origin.coeffs, theta), [origin, theta])
   const spectrum = useMemo(() => spectrumOf(origin.coeffs, scene), [origin, scene])
@@ -394,33 +408,62 @@ export default function App() {
 
   const sourceName =
     morph && morphEnds
-      ? `过渡 ${morphEnds.A.name} → ${morphEnds.B.name}`
+      ? t('过渡 {a} → {b}', { a: morphEnds.A.name, b: morphEnds.B.name })
       : shared
-        ? '分享链接'
+        ? t('分享链接')
         : opened
           ? `${opened.name} · ${opened.id}`
           : readOk
-            ? (activeFile?.name ?? '手绘')
-            : PRESET_NAMES[preset]
-  const rate = theta.speed / theta.T
+            ? (activeFile?.name ?? t('手绘'))
+            : t(PRESET_NAMES[preset])
+  // 「降低运动量」把动画速度减半——不是停掉：停掉就看不出这是在画什么了（PRD §8 无障碍）
+  const rate = (theta.speed / theta.T) * (reduced ? 0.5 : 1)
+
+  // ---- 全键盘操作（PRD §6 交互规则 3）----
+  const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
+  useShortcuts({
+    togglePlay: () => setPlaying((v) => !v),
+    nudgeK: (d) => patch({ K: clamp(Math.round(theta.K + d), 1, 256) }),
+    nudgeSpeed: (d) => patch({ speed: Number(clamp(theta.speed + d, 0.1, 4).toFixed(2)) }),
+    freeze: () => {
+      void freeze()
+    },
+    openExport: () => {
+      const el = document.getElementById('panel-export')
+      el?.scrollIntoView({ block: 'start' })
+      el?.focus()
+    },
+  })
 
   return (
     <div className="flex h-dvh flex-col">
-      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-hairline px-5 py-3">
-        <h1 className="font-serif text-xl tracking-wide">傅里叶画板</h1>
-        <span className="text-[11px] uppercase tracking-[0.2em] text-mist/40">FourierBoard</span>
-        <span className="ml-auto hidden text-xs text-mist/40 sm:block">任何闭合曲线，都是一串同步旋转的圆</span>
+      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-hairline px-3 py-3 md:px-5">
+        <h1 className="font-serif text-xl tracking-wide">{t('傅里叶画板')}</h1>
+        {/* 中文模式才需要另挂一个拉丁文品牌名；英文模式下它就是标题本身 */}
+        {lang === 'zh' && <span className="text-[11px] uppercase tracking-[0.2em] text-mist/40">FourierBoard</span>}
+        <span className="ml-auto hidden text-xs text-mist/40 sm:block">
+          {t('任何闭合曲线，都是一串同步旋转的圆')}
+        </span>
+        <button
+          type="button"
+          data-testid="lang-toggle"
+          aria-label={lang === 'zh' ? 'Switch to English' : '切换到中文'}
+          onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
+          className="rounded border border-hairline px-2 py-0.5 text-xs text-mist/50 hover:border-sage/60 hover:text-mist"
+        >
+          {lang === 'zh' ? 'EN' : 'ZH'}
+        </button>
       </header>
 
-      <main className="grid min-h-0 flex-1 gap-4 p-4 md:grid-cols-[minmax(0,1fr)_344px]">
+      <main className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-2 md:grid md:grid-cols-[minmax(0,1fr)_344px] md:gap-4 md:overflow-hidden md:p-4">
         <section
-          aria-label="渲染画布"
-          className="relative min-h-72 min-w-0 overflow-hidden rounded-lg border border-hairline bg-paper"
+          aria-label={t('渲染画布')}
+          className="sticky top-0 z-10 h-[42dvh] min-h-52 min-w-0 shrink-0 overflow-hidden rounded-lg border border-hairline bg-paper md:static md:h-auto md:min-h-72"
         >
           <FourierStage scene={scene} trail={theta.trail} playing={playing} highlight={highlight} rate={rate} />
         </section>
 
-        <aside className="flex min-h-0 flex-col gap-5 overflow-y-auto rounded-lg border border-hairline p-4">
+        <aside className="flex min-h-0 flex-col gap-5 rounded-lg border border-hairline p-3 md:shrink md:overflow-y-auto md:p-4">
           <SourcePanel
             tab={tab}
             onTab={onTab}
@@ -446,22 +489,29 @@ export default function App() {
           />
 
           <label className="flex flex-col gap-1.5 text-sm">
-            <span className="text-mist/70">预置形状</span>
+            <span className="text-mist/70">{t('预置形状')}</span>
             <select
-              aria-label="形状"
+              aria-label={t('形状')}
               value={preset}
               onChange={(e) => usePreset(e.target.value as PresetId)}
               className="border border-hairline bg-ink2 px-2 py-1.5 text-sm"
             >
               {PRESET_IDS.map((x) => (
                 <option key={x} value={x}>
-                  {PRESET_NAMES[x]}
+                  {t(PRESET_NAMES[x])}
                 </option>
               ))}
             </select>
           </label>
 
           <ValuePanel theta={theta} onPatch={patch} onReset={reset} />
+
+          <SequencePanel
+            coeffs={origin.coeffs}
+            K={theta.K}
+            T={theta.T}
+            onApply={(p) => patch(p)}
+          />
 
           <SpectrumPanel spectrum={spectrum} highlight={highlight} onSelect={pick} />
 
@@ -507,32 +557,59 @@ export default function App() {
             name={sourceName}
           />
 
-          <div className="flex items-center gap-3 border-t border-hairline pt-4 text-sm">
-            <button
-              type="button"
-              onClick={() => setPlaying((v) => !v)}
-              aria-pressed={playing}
-              className="rounded-md border border-hairline bg-ink2 px-4 py-2 hover:border-sage/60"
-            >
-              {playing ? '暂停' : '播放'}
-            </button>
-            <dl className="ml-auto text-xs text-mist/50">
-              <dt>实际参与项</dt>
-              <dd data-testid="terms" className="font-mono tabular-nums text-mist">
-                {scene.terms.length} / {scene.M}
-              </dd>
-            </dl>
+          <div className="flex flex-col gap-3 border-t border-hairline pt-4 text-sm">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setPlaying((v) => !v)}
+                aria-pressed={playing}
+                className="rounded-md border border-hairline bg-ink2 px-4 py-2 hover:border-sage/60"
+              >
+                {t(playing ? '暂停' : '播放')}
+              </button>
+              <dl className="ml-auto text-xs text-mist/50">
+                <dt>{t('实际参与项')}</dt>
+                <dd data-testid="terms" className="font-mono tabular-nums text-mist">
+                  {scene.terms.length} / {scene.M}
+                </dd>
+              </dl>
+            </div>
+
+            <label className="flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                data-testid="reduced-motion"
+                checked={reduced}
+                onChange={(e) => setReduced(e.target.checked)}
+                className="accent-sage"
+              />
+              <span className="text-mist/60">{t('降低运动量（动画减半，默认跟随系统偏好）')}</span>
+            </label>
+
+            <details className="text-xs text-mist/45">
+              <summary className="cursor-pointer hover:text-mist">{t('键盘快捷键')}</summary>
+              <dl className="mt-2 flex flex-col gap-1">
+                {SHORTCUT_HINTS.map(([key, what]) => (
+                  <div key={key} className="flex items-baseline gap-2">
+                    <dt className="w-14 shrink-0">
+                      <kbd className="rounded border border-hairline bg-ink2 px-1 py-0.5 font-mono">{t(key)}</kbd>
+                    </dt>
+                    <dd>{t(what)}</dd>
+                  </div>
+                ))}
+              </dl>
+            </details>
           </div>
 
           <div className="flex flex-col gap-1.5 border-t border-hairline pt-4 text-sm">
             <div className="flex items-center justify-between">
-              <span className="text-mist/70">分享链接</span>
+              <span className="text-mist/70">{t('分享链接')}</span>
               <button
                 type="button"
                 onClick={onShare}
                 className="rounded-md border border-hairline bg-ink2 px-3 py-1 text-xs hover:border-sage/60"
               >
-                {copied ? '已复制！' : '生成并复制'}
+                {t(copied ? '已复制！' : '生成并复制')}
               </button>
             </div>
             {shareUrl && (
@@ -540,7 +617,7 @@ export default function App() {
                 data-testid="share-url"
                 readOnly
                 value={shareUrl}
-                aria-label="分享链接"
+                aria-label={t('分享链接')}
                 onFocus={(e) => e.currentTarget.select()}
                 className="border border-hairline bg-ink2 px-2 py-1 text-xs text-mist/60"
               />
@@ -548,14 +625,24 @@ export default function App() {
           </div>
 
           <p data-testid="shape-name" className="truncate border-t border-hairline pt-4 text-xs leading-relaxed text-mist/45">
-            当前：{sourceName}
+            {t('当前：{name}', { name: sourceName })}
           </p>
         </aside>
       </main>
 
-      <footer className="border-t border-hairline px-5 py-2 text-xs text-mist/40">
-        全部在浏览器本地计算，不上传、不收集、无需账号
+      <footer className="flex items-center gap-3 border-t border-hairline px-3 py-2 text-xs text-mist/40 md:px-5">
+        <span>{t('全部在浏览器本地计算，不上传、不收集、无需账号')}</span>
+        <button
+          type="button"
+          data-testid="help-open"
+          onClick={() => setHelp(true)}
+          className="ml-auto shrink-0 rounded border border-hairline px-2 py-0.5 hover:border-sage/60 hover:text-mist"
+        >
+          {t('关于与帮助')}
+        </button>
       </footer>
+
+      <HelpDialog open={help} onClose={() => setHelp(false)} />
     </div>
   )
 }

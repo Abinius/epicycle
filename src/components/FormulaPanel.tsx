@@ -13,11 +13,14 @@ import {
   type SeriesRow,
 } from '../core/series.js'
 import type { Scene } from '../core/types.js'
+import { useT } from '../i18n/context.js'
 
 /**
  * 公式面板（PRD A7 系数表 + A8 KaTeX 代入式）。
  * 本模块被 App 用 React.lazy 载入，KaTeX 的 JS 与 CSS 一起落在异步 chunk 里，不进首屏。
  * 公式片段按字符串缓存：反复点选高亮时不会重复排版。
+ *
+ * 注意：LaTeX 里**不许出现中文**（KaTeX 字体没有 CJK 字形），所有中文说明都留在 HTML 层。
  */
 const cache = new Map<string, string>()
 
@@ -36,8 +39,15 @@ function MathSpan({ latex, className }: { latex: string; className?: string }) {
 
 const GRID = 'grid grid-cols-[28px_46px_46px_minmax(0,1fr)_50px] gap-1'
 
-function rowLabel(row: SeriesRow): string {
-  return `系数 n=${row.n}，半径 ${fmt(row.radius)}，相位 ${fmtDeg(row.phaseDeg)} 度，贡献度 ${fmt(row.weight * 100)}%`
+type T = ReturnType<typeof useT>
+
+function rowLabel(t: T, row: SeriesRow): string {
+  return t('系数 n={n}，半径 {r}，相位 {deg} 度，贡献度 {w}%', {
+    n: row.n,
+    r: fmt(row.radius),
+    deg: fmtDeg(row.phaseDeg),
+    w: fmt(row.weight * 100),
+  })
 }
 
 export default function FormulaPanel({
@@ -49,16 +59,17 @@ export default function FormulaPanel({
   highlight: number | null
   onSelect: (index: number | null) => void
 }) {
+  const t = useT()
   const series = useMemo(() => seriesOf(scene), [scene])
   const shown = series.rows.slice(0, FORMULA_MAX_TERMS)
   const omitted = series.rows.length - shown.length
 
   return (
-    <section aria-label="傅里叶公式" className="border-t border-hairline pt-4">
+    <section aria-label={t('傅里叶公式')} className="border-t border-hairline pt-4">
       <div className="mb-2 flex items-baseline justify-between gap-2">
-        <h2 className="text-sm text-mist/70">公式</h2>
+        <h2 className="text-sm text-mist/70">{t('公式')}</h2>
         <span className="font-mono text-xs tabular-nums text-mist/40">
-          {scene.K} 项 · 共 {scene.M} 个系数
+          {t('{k} 项 · 共 {m} 个系数', { k: scene.K, m: scene.M })}
         </span>
       </div>
 
@@ -70,8 +81,8 @@ export default function FormulaPanel({
         <button
           type="button"
           onClick={() => onSelect(null)}
-          aria-label="常数项 c_0：路径质心，不旋转"
-          title="常数项 c_0：路径质心，不旋转"
+          aria-label={t('常数项 c_0：路径质心，不旋转')}
+          title={t('常数项 c_0：路径质心，不旋转')}
           className="rounded px-0.5 hover:bg-mist/5"
         >
           <MathSpan latex={centerLatex(series.center)} />
@@ -82,30 +93,34 @@ export default function FormulaPanel({
             type="button"
             onClick={() => onSelect(i)}
             aria-pressed={highlight === i}
-            aria-label={rowLabel(row)}
-            title={`第 ${i + 1} 大项：半径 ${fmt(row.radius)}，相位 ${fmtDeg(row.phaseDeg)}°`}
+            aria-label={rowLabel(t, row)}
+            title={t('第 {i} 大项：半径 {r}，相位 {deg}°', {
+              i: i + 1,
+              r: fmt(row.radius),
+              deg: fmtDeg(row.phaseDeg),
+            })}
             className={highlight === i ? 'rounded bg-clay/20 px-0.5 text-clay' : 'rounded px-0.5 hover:bg-mist/5'}
           >
             <MathSpan latex={termLatex(row)} />
           </button>
         ))}
         {omitted > 0 ? (
-          <span className="rounded px-0.5 text-mist/40" title={`另有 ${omitted} 项未展开`}>
+          <span className="rounded px-0.5 text-mist/40" title={t('另有 {n} 项未展开', { n: omitted })}>
             <MathSpan latex={FORMULA_TAIL} />
           </span>
         ) : null}
       </p>
 
       {series.rows.length === 0 ? (
-        <p className="mt-3 text-xs text-mist/40">这个形状没有可参与的项。</p>
+        <p className="mt-3 text-xs text-mist/40">{t('这个形状没有可参与的项。')}</p>
       ) : (
-        <div aria-label="系数表" className="mt-3">
+        <div aria-label={t('系数表')} className="mt-3">
           <div className={`${GRID} border-b border-hairline px-1 pb-1 text-[10px] uppercase tracking-wide text-mist/35`}>
             <span>n</span>
             <span>|c|</span>
             <span>φ°</span>
             <span>c=a+bi</span>
-            <span className="text-right">贡献</span>
+            <span className="text-right">{t('贡献')}</span>
           </div>
           {series.rows.map((row, i) => (
             <button
@@ -114,7 +129,7 @@ export default function FormulaPanel({
               data-testid="coeff-row"
               onClick={() => onSelect(i)}
               aria-pressed={highlight === i}
-              aria-label={rowLabel(row)}
+              aria-label={rowLabel(t, row)}
               className={`${GRID} w-full items-baseline rounded px-1 py-1 text-left font-mono text-[11px] tabular-nums ${
                 highlight === i ? 'bg-clay/20 text-clay' : 'hover:bg-mist/5'
               }`}
@@ -130,7 +145,7 @@ export default function FormulaPanel({
       )}
 
       <p className="mt-2 text-xs leading-relaxed text-mist/40">
-        点公式或表格里的一项，画面只显示它之前的圆链，再点一次恢复。n 为负是反向旋转。
+        {t('点公式或表格里的一项，画面只显示它之前的圆链，再点一次恢复。n 为负是反向旋转。')}
       </p>
     </section>
   )

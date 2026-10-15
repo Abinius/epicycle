@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { shouldAppend, type Stroke } from '../core/strokes.js'
+import { useT } from '../i18n/context.js'
 
 /**
  * 手绘输入（PRD A2）：指针事件一套代码同时管鼠标、触屏与触控笔。
@@ -14,9 +15,15 @@ export function DrawCanvas({
   strokes: readonly Stroke[]
   onChange: (next: Stroke[]) => void
 }) {
+  const t = useT()
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   /** 正在画的那一笔；抬手才并入 strokes */
   const pending = useRef<number[] | null>(null)
+  /**
+   * 正在画的那根指针。触屏上同时落下第二根手指（或手掌）是常态，
+   * 不认 pointerId 的话第二根会直接抢走 pending，把第一笔画成乱线。
+   */
+  const active = useRef<number | null>(null)
   // 挂载时装的 ResizeObserver 要能读到最新笔迹，故经 ref 透传
   const latest = useRef(strokes)
   latest.current = strokes
@@ -71,31 +78,37 @@ export function DrawCanvas({
     <div className="flex flex-col gap-2">
       <canvas
         ref={canvasRef}
-        aria-label="手绘区"
+        aria-label={t('手绘区')}
         className="block h-44 w-full cursor-crosshair touch-none rounded border border-hairline bg-paper"
         onPointerDown={(e) => {
           if (e.pointerType === 'mouse' && e.button !== 0) return // 鼠标只认左键
+          if (active.current !== null) return // 已经有一根在画，其余一律不理
           e.preventDefault()
+          active.current = e.pointerId
           e.currentTarget.setPointerCapture(e.pointerId)
           pending.current = local(e)
           paint()
         }}
         onPointerMove={(e) => {
           const cur = pending.current
-          if (!cur) return
+          if (!cur || e.pointerId !== active.current) return
           const [x, y] = local(e)
           if (!shouldAppend(cur, x, y)) return
           cur.push(x, y)
           paint()
         }}
-        onPointerUp={() => {
+        onPointerUp={(e) => {
+          if (e.pointerId !== active.current) return
+          active.current = null
           const cur = pending.current
           pending.current = null
           // 只有一个点的「笔画」是误触，不是线，丢掉
           if (cur && cur.length >= 4) onChange([...strokes, cur])
           else paint()
         }}
-        onPointerCancel={() => {
+        onPointerCancel={(e) => {
+          if (e.pointerId !== active.current) return
+          active.current = null
           pending.current = null
           paint()
         }}
@@ -108,7 +121,7 @@ export function DrawCanvas({
           onClick={() => onChange(strokes.slice(0, -1))}
           className="rounded border border-hairline bg-ink2 px-2 py-1 hover:border-sage/60 disabled:opacity-40"
         >
-          撤销上一笔
+          {t('撤销上一笔')}
         </button>
         <button
           type="button"
@@ -116,10 +129,10 @@ export function DrawCanvas({
           onClick={() => onChange([])}
           className="rounded border border-hairline bg-ink2 px-2 py-1 hover:border-sage/60 disabled:opacity-40"
         >
-          清空
+          {t('清空')}
         </button>
         <span data-testid="stroke-count" className="ml-auto text-mist/40">
-          {strokes.length} 笔
+          {t('{n} 笔', { n: strokes.length })}
         </span>
       </div>
     </div>
