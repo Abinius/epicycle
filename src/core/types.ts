@@ -103,6 +103,8 @@ export interface FourierAsset {
     file_name?: string
     bytes?: number
     subpaths?: number
+    /** 由哪份资产派生而来（模式 Y 几何变换） */
+    derived_from?: string
   }
   sampling: { N: number; closed: boolean; close_mode: 'join' | 'mirror'; subdivide_eps: number }
   domain: { n_min: number; n_max: number }

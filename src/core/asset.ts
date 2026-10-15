@@ -241,6 +241,7 @@ export function validateAsset(v: unknown): AssetRead {
     !(source.file_name === undefined || isStr(source.file_name)) ||
     !(source.bytes === undefined || isNum(source.bytes)) ||
     !(source.subpaths === undefined || isNum(source.subpaths)) ||
+    !(source.derived_from === undefined || isStr(source.derived_from)) ||
     !isNum(sampling.N) ||
     typeof sampling.closed !== 'boolean' ||
     !CLOSE_MODES.includes(sampling.close_mode as string) ||
@@ -282,6 +283,7 @@ export function validateAsset(v: unknown): AssetRead {
         ...(isStr(source.file_name) ? { file_name: source.file_name } : {}),
         ...(isNum(source.bytes) ? { bytes: source.bytes } : {}),
         ...(isNum(source.subpaths) ? { subpaths: source.subpaths } : {}),
+        ...(isStr(source.derived_from) ? { derived_from: source.derived_from } : {}),
       },
       sampling: {
         N: sampling.N,

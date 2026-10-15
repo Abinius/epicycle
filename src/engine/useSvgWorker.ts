@@ -20,7 +20,8 @@ export function useSvgWorker(text: string | null, opts: PrepareOptions): Prepare
   useEffect(() => {
     const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
     worker.onmessage = (e: MessageEvent<WorkerRes>) => {
-      if (e.data.id === epoch.current) setResult(e.data.result)
+      const d = e.data
+      if (d.kind === 'prepare' && d.id === epoch.current) setResult(d.result)
     }
     workerRef.current = worker
     return () => {
@@ -37,7 +38,7 @@ export function useSvgWorker(text: string | null, opts: PrepareOptions): Prepare
       setResult(null)
       return
     }
-    const req: WorkerReq = { id, text, opts: { N, close_mode, longest_only, tolerance } }
+    const req: WorkerReq = { id, kind: 'prepare', text, opts: { N, close_mode, longest_only, tolerance } }
     worker.postMessage(req)
   }, [text, N, close_mode, longest_only, tolerance])
 

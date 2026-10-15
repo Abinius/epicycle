@@ -243,4 +243,17 @@ describe('导出与导入', () => {
     expect(r.ok).toBe(true)
     if (r.ok) expect(r.asset.source).toEqual({ type: 'shared' })
   })
+
+  it('derived_from（模式 Y 派生来源）往返保留', () => {
+    const r = validateAsset({
+      ...makeAsset(),
+      source: { type: 'preset', preset: 'heart', derived_from: 'fa_abc123' },
+    })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.asset.source).toEqual({ type: 'preset', preset: 'heart', derived_from: 'fa_abc123' })
+  })
+
+  it('derived_from 类型不对即挡下', () => {
+    expect(validateAsset({ ...makeAsset(), source: { type: 'preset', derived_from: 42 } }).ok).toBe(false)
+  })
 })

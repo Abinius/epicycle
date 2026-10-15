@@ -213,6 +213,38 @@ test('分享链接：生成 → 干净上下文打开 → 形状与参数复现�
   expect(errors).toEqual([])
 })
 
+test('变形（模式 Y）：派生出一份新资产，公式随之改变，原形状留在库里', async ({ page }) => {
+  const errors: string[] = []
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text())
+  })
+  page.on('pageerror', (err) => errors.push(err.message))
+
+  await page.goto('/')
+  await expect(page.getByTestId('formula').locator('.katex')).not.toHaveCount(0)
+  const before = await formulaText(page)
+  const beforeRows = await page.getByTestId('asset-row').count()
+
+  // 非均匀缩放：宽度拉 2 倍、高度压一半。
+  // 均匀缩放会被 viewScale = 0.8/Σ|c_n| 归一掉、视觉不变，测不出真变形
+  await page.getByRole('slider', { name: '宽度' }).fill('2')
+  await page.getByRole('slider', { name: '高度' }).fill('0.5')
+
+  await page.getByRole('button', { name: /派生为/ }).click()
+
+  // 父 + 子都进了库；派生那份带变换标签
+  await expect(page.getByTestId('asset-row')).toHaveCount(beforeRows + 2)
+  const names = await page.getByTestId('asset-row').allInnerTexts()
+  expect(names.some((n) => n.includes('x2·y0.5'))).toBe(true)
+
+  // 工作台换成派生出的形状，公式与派生前不同
+  await expect(page.getByTestId('shape-name')).toContainText('x2·y0.5')
+  expect(await formulaText(page)).not.toBe(before)
+  await expect.poll(() => paintedPixels(page), { timeout: 8000 }).toBeGreaterThan(200)
+
+  expect(errors).toEqual([])
+})
+
 test('导入坏文件给出诊断，删除把资产真的从本地库里去掉', async ({ page }) => {
   const errors: string[] = []
   page.on('console', (m) => {

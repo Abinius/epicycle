@@ -121,7 +121,8 @@ describe('资产库诊断（技术文档 §10 表 12 条起）', () => {
 
   it('每条都有文案与建议动作，编号与文档对齐', () => {
     const all = [...Object.values(ASSET_DIAGNOSTICS), storedCorrupt(2)]
-    expect(all.map((d) => d.id)).toEqual([12, 13, 14, 15, 16])
+    // 排序后比：只钉编号集合（缺号、重号都会红），不耦合 record 的声明顺序
+    expect(all.map((d) => d.id).sort((a, b) => a - b)).toEqual([12, 13, 14, 15, 16, 17])
     for (const d of all) {
       expect(d.message.length, `#${d.id}`).toBeGreaterThan(0)
       expect(d.hint.length, `#${d.id}`).toBeGreaterThan(0)

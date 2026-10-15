@@ -162,6 +162,13 @@ export const ASSET_DIAGNOSTICS = {
     message: '资产版本不受支持，或内容与指纹不符',
     hint: '用原来的浏览器重新导出一份',
   },
+  /** 17：模式 Y 派生没算完，资产没生成 */
+  deriveFailed: {
+    id: 17,
+    severity: 'error',
+    message: '变形没算完，派生资产没生成',
+    hint: '再试一次；如果反复失败，先用「冻结为资产」保存当前形状',
+  },
 } satisfies Record<string, Diagnostic>
 
 /** 16：库里有资产读不出来。只跳过、不删除——先让用户自己决定 */

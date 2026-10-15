@@ -1,12 +1,14 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import { AssetPanel, type Frozen } from './components/AssetPanel.js'
+import { DerivePanel } from './components/DerivePanel.js'
 import { FourierStage } from './components/FourierStage.js'
 import { SourcePanel, type SourceOptions, type SourceTab } from './components/SourcePanel.js'
 import { SpectrumPanel } from './components/SpectrumPanel.js'
 import { TermEditor } from './components/TermEditor.js'
 import { ValuePanel } from './components/ValuePanel.js'
 import { boundsOf, createAsset, exportJson, parseAsset } from './core/asset.js'
-import { diagnose, storedCorrupt, type Diagnostic } from './core/diagnostic.js'
+import { ASSET_DIAGNOSTICS, diagnose, storedCorrupt, type Diagnostic } from './core/diagnostic.js'
+import { deriveAssetFrom, type ShapeTransform } from './core/derive.js'
 import { buildScene } from './core/epicycle.js'
 import { reconstructPoints } from './core/dft.js'
 import { PRESET_IDS, PRESET_NAMES, presetOf, type PresetId } from './core/presets.js'
@@ -14,6 +16,7 @@ import { spectrumOf } from './core/spectrum.js'
 import { decodeShare, encodeShare } from './core/share.js'
 import { strokesToPath, type Stroke } from './core/strokes.js'
 import { defaultTheta, type Coefficient, type FourierAsset, type PerNParam, type Theta } from './core/types.js'
+import { useDeriveWorker } from './engine/useDeriveWorker.js'
 import { useSvgWorker } from './engine/useSvgWorker.js'
 import { deleteAsset, listAssets, saveAsset, storageDiagnostic } from './storage/assets.js'
 
@@ -73,6 +76,8 @@ export default function App() {
   const [busy, setBusy] = useState(false)
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [deriving, setDeriving] = useState(false)
+  const derive = useDeriveWorker()
 
   const patch = (p: Partial<Theta>) => setTheta((t) => ({ ...t, ...p }))
   const reset = () => {
@@ -317,6 +322,36 @@ export default function App() {
     )
   }
 
+  const onDerive = async (t: ShapeTransform) => {
+    setDeriving(true)
+    try {
+      // 父资产：打开着的就用它；否则先把当前形状冻结成父资产——派生得有一份来源可溯，
+      // 不能存一个指向不存在资产的 derived_from
+      let parent = opened
+      if (!parent) {
+        parent = createAsset({
+          name: origin.name,
+          createdAt: new Date().toISOString(),
+          source: origin.source,
+          sampling: origin.sampling,
+          bounds: origin.bounds,
+          coeffs: origin.coeffs,
+          dftMs: origin.dft_ms,
+        })
+        await saveAsset(parent)
+      }
+      const result = await derive(parent.coeffs, parent.sampling.N, t)
+      const child = deriveAssetFrom(parent, t, result, new Date().toISOString(), result.dft_ms)
+      await saveAsset(child)
+      await refresh()
+      setOpened(child)
+    } catch (err) {
+      setAssetDiag([err instanceof DOMException ? storageDiagnostic(err) : ASSET_DIAGNOSTICS.deriveFailed])
+    } finally {
+      setDeriving(false)
+    }
+  }
+
   // 打开着的资产本身就是冻结态；否则只有「这份形状正是被冻结的那份」才算
   const frozenView: Frozen | null = opened
     ? { id: opened.id, name: opened.name }
@@ -399,6 +434,14 @@ export default function App() {
           </Suspense>
 
           {pickedN !== null && <TermEditor n={pickedN} scene={scene} perN={theta.perN} onPerN={onPerN} />}
+
+          <DerivePanel
+            from={sourceName}
+            busy={deriving}
+            onDerive={(t) => {
+              void onDerive(t)
+            }}
+          />
 
           <AssetPanel
             frozen={frozenView}
