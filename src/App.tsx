@@ -1,6 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import { AssetPanel, type Frozen } from './components/AssetPanel.js'
 import { DerivePanel } from './components/DerivePanel.js'
+import { ExportPanel } from './components/ExportPanel.js'
 import { FourierStage } from './components/FourierStage.js'
 import { MorphPanel, type MorphState } from './components/MorphPanel.js'
 import { SourcePanel, type SourceOptions, type SourceTab } from './components/SourcePanel.js'
@@ -497,6 +498,14 @@ export default function App() {
           />
 
           <MorphPanel assets={assets} morph={morph} onMorph={setMorph} />
+
+          <ExportPanel
+            scene={scene}
+            periodSeconds={theta.T}
+            trail={theta.trail}
+            highlight={highlight}
+            name={sourceName}
+          />
 
           <div className="flex items-center gap-3 border-t border-hairline pt-4 text-sm">
             <button

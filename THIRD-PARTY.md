@@ -4,7 +4,7 @@
 
 **数据来源**：遍历 `node_modules` 里每个包的 `package.json` 实测得到，不是凭记忆写的。生成方法见文末。
 
-**结论：会随产物进用户浏览器的包只有 5 个，全部 MIT。整个依赖树里没有任何 GPL / AGPL / SSPL / 未知许可证。**
+**结论：会随产物进用户浏览器的包只有 8 个，全部 MIT。整个依赖树里没有任何 GPL / AGPL / SSPL / 未知许可证。**
 
 ---
 
@@ -17,8 +17,13 @@
 | react-dom | 19.3.0 | MIT | UI |
 | scheduler | 0.28.0 | MIT | React 的调度器（react-dom 的传递依赖） |
 | svg-pathdata | 9.0.0 | MIT | 只做 SVG path 的解析与指令归一化；弧长细分与重采样是自研的 |
+| mp4-muxer | 5.2.2 | MIT | MP4 封装（C3 导出，E2 通路）。**动态 import**，单独 chunk，不进首屏 |
+| gifenc | 1.0.3 | MIT | GIF 编码 + 调色板量化（E4 通路）。动态 import |
+| fflate | 0.8.3 | MIT | PNG 序列的 ZIP 打包（E5 通路）。动态 import |
 
-> 注：`katex` 的 `package.json` 里还声明了一个运行期依赖 `commander@15.0.0`（MIT），那是它自带命令行工具用的。我们只 `import` 它的 JS 模块，打包时不会带进来——**实测过**：在 `dist/assets/*.js` 里搜不到 commander 的任何字样。所以进产物的就是上表这 5 个。
+> 注 1：`katex` 的 `package.json` 里还声明了一个运行期依赖 `commander@15.0.0`（MIT），那是它自带命令行工具用的。我们只 `import` 它的 JS 模块，打包时不会带进来——**实测过**：在 `dist/assets/*.js` 里搜不到 commander 的任何字样。
+>
+> 注 2：后三个是 C3 导出引擎引进的（2026-10-15）。它们各自被 `await import()` 引，构建后是独立 chunk（实测 mp4-muxer 30.7 KB / gifenc 9.0 KB / fflate 5.1 KB，gzip 后分别 8.9 / 3.9 / 2.3 KB），**首屏不含任何一个**——只有点了「导出」才会下载。三者的 `package.json` 都没有 `dependencies` 字段，是零依赖包。
 
 ## 二、开发与构建依赖（不随产物分发）
 
@@ -39,11 +44,13 @@
 | @types/react | 19.3.0 | MIT | 类型声明（仅编译期） |
 | @types/react-dom | 19.3.0 | MIT | 类型声明（仅编译期） |
 
-## 三、传递依赖（150 个，按许可证归组）
+## 三、传递依赖（151 个，按许可证归组）
 
 这些是上面两批包的依赖，不直接写在 `package.json` 里，但装在 `node_modules` 中。按许可证分组，组内按包名字典序。
 
-**MIT**（114 个）
+（`scheduler` 也是传递依赖，但它会被打进产物，已列在第一节，此处不重复。）
+
+**MIT**（115 个）
 
 - `@babel/helper-string-parser@7.29.7`
 - `@babel/helper-validator-identifier@7.29.7`
@@ -69,9 +76,11 @@
 - `@tailwindcss/oxide-win32-x64-msvc@4.3.3`
 - `@types/chai@5.2.3`
 - `@types/deep-eql@4.0.2`
+- `@types/dom-webcodecs@0.1.19`
 - `@types/esrecurse@4.3.1`
 - `@types/estree@1.0.9`
 - `@types/json-schema@7.0.15`
+- `@types/wicg-file-system-access@2020.9.8`
 - `@typescript-eslint/eslint-plugin@8.71.2`
 - `@typescript-eslint/parser@8.71.2`
 - `@typescript-eslint/project-service@8.71.2`
@@ -144,7 +153,6 @@
 - `punycode@2.3.1`
 - `qified@0.10.1`
 - `rolldown@1.2.13`
-- `scheduler@0.28.0`
 - `shebang-command@2.0.0`
 - `shebang-regex@3.0.0`
 - `std-env@4.3.0`
@@ -218,6 +226,7 @@
 - **MPL-2.0（4 个）**：`lightningcss` 与它的平台二进制（`lightningcss-win32-x64-msvc`），各两个版本。这是 Tailwind v4 / Vite 在构建期用来转换 CSS 的。MPL 是**文件级弱 copyleft**——只要不修改它的源文件、也不把它作为独立库再分发，就没有额外义务。实测它**不在**打进产物的闭包里（闭包只有第一节那 5 个 MIT 包），只在构建机上跑。
 - **Apache-2.0（16 个）**：宽松许可，额外义务是保留声明与 NOTICE 文件。全部落在开发依赖一侧（ESLint 生态、Playwright、TypeScript），不进产物。
 - **BlueOak-1.0.0（1 个）**：`minimatch`（ESLint 的传递依赖）。OSI 认可的宽松许可，无额外义务。
+- **mp4-muxer 已被官方标记 deprecated**（2026-10-15 装包时 `npm` 提示），官方建议迁到 Mediabunny。**没有迁**，两条理由都是硬的：Mediabunny 是 **MPL-2.0**（文件级弱 copyleft），而它会实实在在地进运行时闭包——第一节那 8 个包一直清一色 MIT，这是有意守住的一条线；另外它 unpacked **10.8 MB**，mp4-muxer 只有 **156 KB**。deprecated 不等于不可用（功能完整、仍在维护线上），等 Mediabunny 换许可、或确实需要它独有的能力（一个包同时覆盖 MP4 与 WebM，能省掉第二个 muxer）时再评估。
 
 ## 五、评估后明确不采用的第三方
 
@@ -233,6 +242,7 @@
 | d3 | 不需要数据绑定，频谱柱状图自绘约 30 行 |
 | idb-keyval | 实际只需要 put / getAll / delete 三个动作，用原生 IndexedDB 包一层 promise 即可，省一个运行时依赖 |
 | mathjs | 体积大。L3「自定义公式 x(t)/y(t)」还没做，做的时候动态加载；若体积不过关换轻量表达式解析方案 |
+| mediabunny | **MPL-2.0** 且会进运行时闭包（其余运行时依赖清一色 MIT），unpacked 10.8 MB。它确实是 mp4-muxer 的官方继任者、还能一个包同时出 MP4 与 WebM，但为这两点把 copyleft 引进用户浏览器不划算。详见第四节 |
 
 另外两条不引依赖的纪律（写在技术文档的「精简纪律」里）：**不引状态管理库**（`useReducer` + Context 足够）、**不引 UI 组件库**（自绘面板 + Tailwind）。
 
