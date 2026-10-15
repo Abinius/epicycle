@@ -244,6 +244,12 @@ describe('导出与导入', () => {
     if (r.ok) expect(r.asset.source).toEqual({ type: 'shared' })
   })
 
+  it('morph 源类型（过渡中间态冻结而来）同样往返', () => {
+    const r = validateAsset({ ...makeAsset(), source: { type: 'morph' } })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.asset.source).toEqual({ type: 'morph' })
+  })
+
   it('derived_from（模式 Y 派生来源）往返保留', () => {
     const r = validateAsset({
       ...makeAsset(),

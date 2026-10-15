@@ -30,7 +30,7 @@
 | M1 | 数学内核（FFT / 采样 / 渲染纯函数）+ 数值黄金样张 V-1…V-6 | ✅ |
 | M2 | SVG 上传 + 手绘输入 + Worker + 冻结资产 + IndexedDB 资产库 | ✅ |
 | M3 | 公式面板（KaTeX 代入式）+ 系数表 + 频谱 + 六个预置 | ✅ |
-| M4 | C2 算子引擎（模式 X / L1 / L2 / 分享短码 / 模式 Y 派生 ✅；Morph ⬜） | 🚧 |
+| M4 | C2 算子引擎（模式 X / L1 / L2 / 分享短码 / 模式 Y 派生 / Morph） | ✅ |
 | M5 | C3 导出引擎（WebCodecs + 降级链 + GIF/PNG 序列） | ⬜ |
 | M6 | 打磨与上线（移动端 / 无障碍 / 中英双语 / 部署） | ⬜ |
 
@@ -54,7 +54,7 @@ Node 24（CI 用的版本）。Windows 上如果 vitest 起不来并报 `Cannot 
 | `npm run e2e` | Playwright 端到端（本机浏览器通道不通时用 `PLAYWRIGHT_CHANNEL=msedge npm run e2e`） |
 | `npm run check` | 上面四条串起来跑，CI 就是这四步再加 E2E |
 
-**2026-10-15 实测**：218 个单测全绿，覆盖率 stmts 98.85 / branch 92.53 / funcs 100 / lines 99.25；首屏 gzip 约 98 KB（预算 300 KB）；Playwright 12 例通过。这些数字会随开发变动，以 CI 为准。
+**2026-10-15 实测**：237 个单测全绿，覆盖率 stmts 98.89 / branch 92.73 / funcs 100 / lines 99.28；首屏 gzip 约 99 KB（预算 300 KB）；Playwright 13 例通过。这些数字会随开发变动，以 CI 为准。
 
 ## 三条不可动摇的架构约束
 
@@ -76,6 +76,7 @@ src/
 │   ├── asset.ts       资产的冻结 / 校验 / JSON 往返 / 量化短码 / 指纹
 │   ├── share.ts       分享链接 ?a=&t= 编解码（短码 + theta，纯函数无 DOM）
 │   ├── derive.ts      模式 Y 形状域派生：coeffs → 重建 → 几何变换 → 重 DFT → 派生资产
+│   ├── morph.ts       双资产过渡：逐项线性插值 cₙ(w)，两端与公共网格
 │   ├── strokes.ts     手绘笔迹 → SVG path 数据
 │   ├── formulas.ts    解析生成器（圆 / 正方形 / 心形 / 星形）
 │   └── presets.ts     六个预置（生成器 + 两条内建路径），与上传共用同一个采样器

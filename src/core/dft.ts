@@ -98,6 +98,24 @@ export function reconstructPoints(coeffs: readonly Coefficient[], N: number): Fl
   return out
 }
 
+/**
+ * 这组系数所属的最小 2 的幂网格。
+ *
+ * 用途是判断「能不能在这组系数上跑 reconstructPoints」：在 N′ 点重建再 DFT 回来，
+ * 得到的是 C_m = Σ_j c_{m+jN′}——**只在 N′ 不小于原网格时才逐位还原**（升采样精确），
+ * 否则 n 与 n∓N′ 折叠到一起（降采样混叠）。dft 的输出恰好满足 gridFor(dft(z, N)) === N。
+ */
+export function gridFor(coeffs: readonly Coefficient[]): number {
+  let maxAbs = 0
+  for (const c of coeffs) {
+    const a = Math.abs(c.n)
+    if (a > maxAbs) maxAbs = a
+  }
+  let n = 2
+  while (n < 2 * (maxAbs + 1)) n <<= 1
+  return n
+}
+
 /** 按模降序、模相等时 |n| 小者优先。资产按这个顺序存储，避免每次 buildScene 重排 */
 export function sortByAbs(coeffs: readonly Coefficient[]): Coefficient[] {
   return coeffs.slice().sort((a, b) => {

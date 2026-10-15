@@ -245,6 +245,55 @@ test('变形（模式 Y）：派生出一份新资产，公式随之改变，原
   expect(errors).toEqual([])
 })
 
+test('过渡（Morph）：两端与各自原图逐字一致，中间态是第三种形状（R-6）', async ({ page }) => {
+  const errors: string[] = []
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text())
+  })
+  page.on('pageerror', (err) => errors.push(err.message))
+
+  await page.goto('/')
+
+  // 先冻结心形，记下它的公式
+  await page.getByRole('button', { name: '冻结为资产' }).click()
+  await expect(page.getByTestId('asset-row')).toHaveCount(1)
+  const heart = await formulaText(page)
+
+  // 换正方形，再冻结一份
+  await page.getByRole('combobox', { name: '形状' }).selectOption('square')
+  await expect(page.getByTestId('shape-name')).toContainText('正方形')
+  const square = await formulaText(page)
+  await page.getByRole('button', { name: '冻结为资产' }).click()
+  await expect(page.getByTestId('asset-row')).toHaveCount(2)
+
+  // 启用过渡，两端分别指向两份资产
+  await page.getByTestId('morph-toggle').check()
+  await page.getByLabel('过渡起点').selectOption({ label: '心形' })
+  await page.getByLabel('过渡终点').selectOption({ label: '正方形' })
+  await expect(page.getByTestId('shape-name')).toContainText('过渡')
+
+  const w = page.getByRole('slider', { name: '过渡 w' })
+  const formulaNow = () => page.getByTestId('formula').innerText()
+
+  // w=0 逐字等于心形的公式、w=1 逐字等于正方形：这就是 R-6 的「两端与各自原图一致」
+  await w.fill('0')
+  await expect.poll(formulaNow).toBe(heart)
+  await w.fill('1')
+  await expect.poll(formulaNow).toBe(square)
+
+  // 中间态既不是心形也不是正方形，画面照常绘制
+  await w.fill('0.5')
+  await expect.poll(formulaNow).not.toBe(heart)
+  expect(await formulaNow()).not.toBe(square)
+  await expect.poll(() => paintedPixels(page), { timeout: 8000 }).toBeGreaterThan(200)
+
+  // 关掉过渡：工作台回到普通来源
+  await page.getByTestId('morph-toggle').uncheck()
+  await expect(page.getByTestId('shape-name')).not.toContainText('过渡')
+
+  expect(errors).toEqual([])
+})
+
 test('导入坏文件给出诊断，删除把资产真的从本地库里去掉', async ({ page }) => {
   const errors: string[] = []
   page.on('console', (m) => {

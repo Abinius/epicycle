@@ -198,7 +198,7 @@ export function exportJson(asset: FourierAsset): string {
 export const SCHEMA_MAJOR = 1
 
 const SCHEMA_RE = /^fourierboard\/asset@(\d+)\.(\d+)$/
-const SOURCE_TYPES = ['svg', 'draw', 'formula', 'preset', 'shared']
+const SOURCE_TYPES = ['svg', 'draw', 'formula', 'preset', 'shared', 'morph']
 const CLOSE_MODES = ['join', 'mirror']
 
 export type AssetRead = { ok: true; asset: FourierAsset } | { ok: false; diagnostic: Diagnostic }

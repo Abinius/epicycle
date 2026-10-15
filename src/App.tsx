@@ -2,6 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react
 import { AssetPanel, type Frozen } from './components/AssetPanel.js'
 import { DerivePanel } from './components/DerivePanel.js'
 import { FourierStage } from './components/FourierStage.js'
+import { MorphPanel, type MorphState } from './components/MorphPanel.js'
 import { SourcePanel, type SourceOptions, type SourceTab } from './components/SourcePanel.js'
 import { SpectrumPanel } from './components/SpectrumPanel.js'
 import { TermEditor } from './components/TermEditor.js'
@@ -10,7 +11,8 @@ import { boundsOf, createAsset, exportJson, parseAsset } from './core/asset.js'
 import { ASSET_DIAGNOSTICS, diagnose, storedCorrupt, type Diagnostic } from './core/diagnostic.js'
 import { deriveAssetFrom, type ShapeTransform } from './core/derive.js'
 import { buildScene } from './core/epicycle.js'
-import { reconstructPoints } from './core/dft.js'
+import { gridFor, reconstructPoints } from './core/dft.js'
+import { morphBounds, morphCoeffs, planMorph } from './core/morph.js'
 import { PRESET_IDS, PRESET_NAMES, presetOf, type PresetId } from './core/presets.js'
 import { spectrumOf } from './core/spectrum.js'
 import { decodeShare, encodeShare } from './core/share.js'
@@ -59,6 +61,7 @@ export default function App() {
   const [preset, setPreset] = useState<PresetId>('heart')
   const initialShared = readShared()
   const [shared, setShared] = useState<{ coeffs: Coefficient[]; theta: Theta } | null>(initialShared)
+  const [morph, setMorph] = useState<MorphState | null>(null)
   const [theta, setTheta] = useState<Theta>(initialShared?.theta ?? defaultTheta)
   const [playing, setPlaying] = useState(true)
   // 以频率 n（而非行下标）为锚：编辑把项挤出 terms 后面板仍挂原 n，调高即可恢复
@@ -128,15 +131,39 @@ export default function App() {
   }, [preset])
 
   const readOk = read?.ok ?? false
+  // 过渡两端：按 id 从库里现查，资产被删掉时自然失效（origin 会退回普通来源）
+  const morphEnds = useMemo(() => {
+    if (!morph) return null
+    const A = assets.find((x) => x.id === morph.a)
+    const B = assets.find((x) => x.id === morph.b)
+    return A && B ? { A, B } : null
+  }, [morph, assets])
+  // 把两端搬到公共网格：O(N·M)，只随「换了两端」重算，不随 w 重算
+  const morphPlan = useMemo(
+    () => (morphEnds ? planMorph(morphEnds.A.coeffs, morphEnds.B.coeffs) : null),
+    [morphEnds],
+  )
+
   const origin = useMemo<Origin>(() => {
+    if (morph && morphEnds && morphPlan) {
+      return {
+        name: `过渡 ${morphEnds.A.name} → ${morphEnds.B.name}`,
+        coeffs: morphCoeffs(morphPlan, morph.w),
+        bounds: morphBounds(morphPlan, morph.w),
+        dft_ms: 0,
+        sampling: { N: morphPlan.N, closed: true, close_mode: 'join', subdivide_eps: 0 },
+        source: { type: 'morph' },
+      }
+    }
     if (shared) {
-      const points = reconstructPoints(shared.coeffs, 256)
+      // 重建点数取这组系数所属的网格：填小了会把 n 与 n∓N 折叠到一起
+      const N = gridFor(shared.coeffs)
       return {
         name: '分享链接',
         coeffs: shared.coeffs,
-        bounds: boundsOf(shared.coeffs, points),
+        bounds: boundsOf(shared.coeffs, reconstructPoints(shared.coeffs, N)),
         dft_ms: 0,
-        sampling: { N: 256, closed: true, close_mode: 'join', subdivide_eps: 0 },
+        sampling: { N, closed: true, close_mode: 'join', subdivide_eps: 0 },
         source: { type: 'shared' },
       }
     }
@@ -176,7 +203,7 @@ export default function App() {
       },
       source: { type: 'preset', preset, subpaths: presetData.sample.subpaths },
     }
-  }, [shared, opened, readOk, prepared, activeFile, opts.close_mode, preset, presetData])
+  }, [morph, morphEnds, morphPlan, shared, opened, readOk, prepared, activeFile, opts.close_mode, preset, presetData])
 
   const scene = useMemo(() => buildScene(origin.coeffs, theta), [origin, theta])
   const spectrum = useMemo(() => spectrumOf(origin.coeffs, scene), [origin, scene])
@@ -202,18 +229,21 @@ export default function App() {
     setStrokes([])
     setOpened(null)
     setShared(null)
+    setMorph(null)
     setPickedN(null)
   }
   const onTab = (next: SourceTab) => {
     setTab(next)
     setOpened(null)
     setShared(null)
+    setMorph(null)
     setPickedN(null)
   }
   const onStrokes = (next: Stroke[]) => {
     setStrokes(next)
     setOpened(null)
     setShared(null)
+    setMorph(null)
     setPickedN(null)
   }
   const loadFile = async (f: File) => {
@@ -222,6 +252,7 @@ export default function App() {
     setTab('svg')
     setOpened(null)
     setShared(null)
+    setMorph(null)
     setPickedN(null)
   }
 
@@ -265,6 +296,7 @@ export default function App() {
   const openAsset = (a: FourierAsset) => {
     setOpened(a)
     setShared(null)
+    setMorph(null)
     setPickedN(null)
   }
 
@@ -359,13 +391,16 @@ export default function App() {
       ? { id: frozen.id, name: frozen.name }
       : null
 
-  const sourceName = shared
-    ? '分享链接'
-    : opened
-      ? `${opened.name} · ${opened.id}`
-      : readOk
-        ? (activeFile?.name ?? '手绘')
-        : PRESET_NAMES[preset]
+  const sourceName =
+    morph && morphEnds
+      ? `过渡 ${morphEnds.A.name} → ${morphEnds.B.name}`
+      : shared
+        ? '分享链接'
+        : opened
+          ? `${opened.name} · ${opened.id}`
+          : readOk
+            ? (activeFile?.name ?? '手绘')
+            : PRESET_NAMES[preset]
   const rate = theta.speed / theta.T
 
   return (
@@ -460,6 +495,8 @@ export default function App() {
               void importAsset(f)
             }}
           />
+
+          <MorphPanel assets={assets} morph={morph} onMorph={setMorph} />
 
           <div className="flex items-center gap-3 border-t border-hairline pt-4 text-sm">
             <button

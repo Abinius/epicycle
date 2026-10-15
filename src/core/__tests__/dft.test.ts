@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { TWO_PI } from '../complex.js'
-import { dft, isPowerOfTwo, reconstructPoints, sortByAbs } from '../dft.js'
+import { dft, gridFor, isPowerOfTwo, reconstructPoints, sortByAbs } from '../dft.js'
 import type { Coefficient } from '../types.js'
 
 const N = 1024
@@ -153,6 +153,68 @@ describe('reconstructPoints', () => {
     }
   })
 
+  it('升采样精确：在更大的网格上重建再 DFT，原系数逐位保留、新频点为零', () => {
+    const c = dft(sample((t) => [Math.cos(t) + 0.3 * Math.cos(7 * t), Math.sin(3 * t)], 64), 64)
+    const up = dft(reconstructPoints(c, 512), 512)
+    // 混叠公式 C_m = Σ_j c_{m+jN'}：N' 变大时没有两个 n 相差 N'，故原系数原样留在原位
+    for (const src of c) {
+      const got = up.find((x) => x.n === src.n)!
+      expect(Math.abs(got.re - src.re), `n=${src.n} re`).toBeLessThan(1e-12)
+      expect(Math.abs(got.im - src.im), `n=${src.n} im`).toBeLessThan(1e-12)
+    }
+    // 64 网格里不存在的频点（如 n=200）在 512 网格上是零
+    expect(Math.hypot(up.find((x) => x.n === 200)!.re, up.find((x) => x.n === 200)!.im)).toBeLessThan(1e-12)
+  })
+
+  it('降采样混叠：n 与 n−N′ 折叠到一起，所以 reconstructPoints 只许升不许降', () => {
+    // 32 网格上的两个不同频率 n=9 与 n=−7：在 16 网格上只差一个 16，相位完全重合
+    const c: Coefficient[] = [
+      { n: 9, re: 1, im: 0 },
+      { n: -7, re: 0.5, im: 0 },
+    ]
+    const down = dft(reconstructPoints(c, 16), 16)
+    // 两项叠成一项，能量整个落到 −7 上（9 不在 16 网格的输出范围 |n| ≤ 7 里）
+    const atMinus7 = down.find((x) => x.n === -7)!
+    expect(atMinus7.re).toBeCloseTo(1.5, 11)
+    expect(atMinus7.im).toBeCloseTo(0, 11)
+    expect(down.some((x) => x.n === 9)).toBe(false)
+
+    // 按 gridFor 升到 32 再重建，两项各就各位——这就是 Morph 只许升采样到公共网格的原因
+    const up = dft(reconstructPoints(c, 32), 32)
+    expect(up.find((x) => x.n === 9)!.re).toBeCloseTo(1, 11)
+    expect(up.find((x) => x.n === -7)!.re).toBeCloseTo(0.5, 11)
+  })
+})
+
+describe('gridFor', () => {
+  it('dft 的输出恰好落在它自己的网格上', () => {
+    for (const n of [16, 64, 256]) {
+      expect(gridFor(dft(sample((t) => [Math.cos(t), Math.sin(t)], n), n))).toBe(n)
+    }
+  })
+
+  it('稀疏系数按最大 |n| 取最小 2 的幂网格', () => {
+    expect(gridFor([{ n: 0, re: 1, im: 0 }])).toBe(2)
+    expect(gridFor([{ n: 1, re: 1, im: 0 }, { n: -1, re: 0, im: 1 }])).toBe(4)
+    expect(gridFor([{ n: 11, re: 1, im: 0 }])).toBe(32)
+    expect(gridFor([{ n: -127, re: 1, im: 0 }])).toBe(256)
+  })
+
+  it('按 gridFor 重建再 DFT 逐位还原（升采样精确的充分条件）', () => {
+    const sparse: Coefficient[] = [
+      { n: 0, re: 0.5, im: -0.25 },
+      { n: 11, re: 1, im: 0.5 },
+      { n: -11, re: 0.3, im: -0.2 },
+    ]
+    const N2 = gridFor(sparse)
+    expect(N2).toBe(32)
+    const back = dft(reconstructPoints(sparse, N2), N2)
+    for (const src of sparse) {
+      const got = back.find((x) => x.n === src.n)!
+      expect(Math.abs(got.re - src.re), `n=${src.n} re`).toBeLessThan(1e-12)
+      expect(Math.abs(got.im - src.im), `n=${src.n} im`).toBeLessThan(1e-12)
+    }
+  })
 })
 
 describe('sortByAbs', () => {
