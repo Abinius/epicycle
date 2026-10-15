@@ -98,7 +98,7 @@ export interface FourierAsset {
   created_at: string
   /** preset 存预置 id（六个示例），其余三种是用户自己给的形状 */
   source: {
-    type: 'svg' | 'draw' | 'formula' | 'preset'
+    type: 'svg' | 'draw' | 'formula' | 'preset' | 'shared'
     preset?: string
     file_name?: string
     bytes?: number

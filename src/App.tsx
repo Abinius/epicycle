@@ -8,8 +8,10 @@ import { ValuePanel } from './components/ValuePanel.js'
 import { boundsOf, createAsset, exportJson, parseAsset } from './core/asset.js'
 import { diagnose, storedCorrupt, type Diagnostic } from './core/diagnostic.js'
 import { buildScene } from './core/epicycle.js'
+import { reconstructPoints } from './core/dft.js'
 import { PRESET_IDS, PRESET_NAMES, presetOf, type PresetId } from './core/presets.js'
 import { spectrumOf } from './core/spectrum.js'
+import { decodeShare, encodeShare } from './core/share.js'
 import { strokesToPath, type Stroke } from './core/strokes.js'
 import { defaultTheta, type Coefficient, type FourierAsset, type PerNParam, type Theta } from './core/types.js'
 import { useSvgWorker } from './engine/useSvgWorker.js'
@@ -45,9 +47,16 @@ function PanelSkeleton() {
   )
 }
 
+/** 首次进入时从 URL 读分享载荷（技术文档 §3.3：?a=<短码>&t=<theta 短码>） */
+function readShared(): { coeffs: Coefficient[]; theta: Theta } | null {
+  return window.location.search ? decodeShare(window.location.search.slice(1)) : null
+}
+
 export default function App() {
   const [preset, setPreset] = useState<PresetId>('heart')
-  const [theta, setTheta] = useState<Theta>(defaultTheta)
+  const initialShared = readShared()
+  const [shared, setShared] = useState<{ coeffs: Coefficient[]; theta: Theta } | null>(initialShared)
+  const [theta, setTheta] = useState<Theta>(initialShared?.theta ?? defaultTheta)
   const [playing, setPlaying] = useState(true)
   // 以频率 n（而非行下标）为锚：编辑把项挤出 terms 后面板仍挂原 n，调高即可恢复
   const [pickedN, setPickedN] = useState<number | null>(null)
@@ -62,6 +71,8 @@ export default function App() {
   // origin 一起存进冻结态：换素材后 origin 是新的对象，引用一比就知道这个冻结态失效了
   const [frozen, setFrozen] = useState<(Frozen & { origin: Origin }) | null>(null)
   const [busy, setBusy] = useState(false)
+  const [shareUrl, setShareUrl] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const patch = (p: Partial<Theta>) => setTheta((t) => ({ ...t, ...p }))
   const reset = () => {
@@ -113,6 +124,17 @@ export default function App() {
 
   const readOk = read?.ok ?? false
   const origin = useMemo<Origin>(() => {
+    if (shared) {
+      const points = reconstructPoints(shared.coeffs, 256)
+      return {
+        name: '分享链接',
+        coeffs: shared.coeffs,
+        bounds: boundsOf(shared.coeffs, points),
+        dft_ms: 0,
+        sampling: { N: 256, closed: true, close_mode: 'join', subdivide_eps: 0 },
+        source: { type: 'shared' },
+      }
+    }
     if (opened) {
       return {
         name: opened.name,
@@ -149,7 +171,7 @@ export default function App() {
       },
       source: { type: 'preset', preset, subpaths: presetData.sample.subpaths },
     }
-  }, [opened, readOk, prepared, activeFile, opts.close_mode, preset, presetData])
+  }, [shared, opened, readOk, prepared, activeFile, opts.close_mode, preset, presetData])
 
   const scene = useMemo(() => buildScene(origin.coeffs, theta), [origin, theta])
   const spectrum = useMemo(() => spectrumOf(origin.coeffs, scene), [origin, scene])
@@ -174,16 +196,19 @@ export default function App() {
     setFile(null)
     setStrokes([])
     setOpened(null)
+    setShared(null)
     setPickedN(null)
   }
   const onTab = (next: SourceTab) => {
     setTab(next)
     setOpened(null)
+    setShared(null)
     setPickedN(null)
   }
   const onStrokes = (next: Stroke[]) => {
     setStrokes(next)
     setOpened(null)
+    setShared(null)
     setPickedN(null)
   }
   const loadFile = async (f: File) => {
@@ -191,6 +216,7 @@ export default function App() {
     setFile({ name: f.name, text, bytes: f.size })
     setTab('svg')
     setOpened(null)
+    setShared(null)
     setPickedN(null)
   }
 
@@ -233,6 +259,7 @@ export default function App() {
 
   const openAsset = (a: FourierAsset) => {
     setOpened(a)
+    setShared(null)
     setPickedN(null)
   }
 
@@ -278,6 +305,18 @@ export default function App() {
     }
   }
 
+  const onShare = () => {
+    const url = `${window.location.origin}${window.location.pathname}?${encodeShare(origin.coeffs, theta)}`
+    setShareUrl(url)
+    navigator.clipboard?.writeText(url).then(
+      () => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      },
+      () => {},
+    )
+  }
+
   // 打开着的资产本身就是冻结态；否则只有「这份形状正是被冻结的那份」才算
   const frozenView: Frozen | null = opened
     ? { id: opened.id, name: opened.name }
@@ -285,11 +324,13 @@ export default function App() {
       ? { id: frozen.id, name: frozen.name }
       : null
 
-  const sourceName = opened
-    ? `${opened.name} · ${opened.id}`
-    : readOk
-      ? (activeFile?.name ?? '手绘')
-      : PRESET_NAMES[preset]
+  const sourceName = shared
+    ? '分享链接'
+    : opened
+      ? `${opened.name} · ${opened.id}`
+      : readOk
+        ? (activeFile?.name ?? '手绘')
+        : PRESET_NAMES[preset]
   const rate = theta.speed / theta.T
 
   return (
@@ -392,6 +433,29 @@ export default function App() {
                 {scene.terms.length} / {scene.M}
               </dd>
             </dl>
+          </div>
+
+          <div className="flex flex-col gap-1.5 border-t border-hairline pt-4 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-mist/70">分享链接</span>
+              <button
+                type="button"
+                onClick={onShare}
+                className="rounded-md border border-hairline bg-ink2 px-3 py-1 text-xs hover:border-sage/60"
+              >
+                {copied ? '已复制！' : '生成并复制'}
+              </button>
+            </div>
+            {shareUrl && (
+              <input
+                data-testid="share-url"
+                readOnly
+                value={shareUrl}
+                aria-label="分享链接"
+                onFocus={(e) => e.currentTarget.select()}
+                className="border border-hairline bg-ink2 px-2 py-1 text-xs text-mist/60"
+              />
+            )}
           </div>
 
           <p data-testid="shape-name" className="truncate border-t border-hairline pt-4 text-xs leading-relaxed text-mist/45">

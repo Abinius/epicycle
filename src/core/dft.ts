@@ -74,6 +74,30 @@ export function dft(z: Float64Array, N: number): Coefficient[] {
   return out
 }
 
+/**
+ * 逆 DFT：从系数重建 N 个采样点（交错数组 [x0,y0,...]，与 dft() 输入同布局）。
+ * z_k = Σ_n c_n · e^{i·2π·n·k/N}。N 须为 2 的幂，使重建结果可直接喂回 dft() 做模式 Y 的重算。
+ * 分享链接估包围盒、模式 Y「coeffs → 重建 → 变换 → 重采样 → 重 DFT」共用这一人口。
+ */
+export function reconstructPoints(coeffs: readonly Coefficient[], N: number): Float64Array {
+  if (!isPowerOfTwo(N)) throw new Error(`N 必须为 2 的幂，收到 ${N}`)
+  const out = new Float64Array(2 * N)
+  for (let k = 0; k < N; k++) {
+    const ph = (TWO_PI * k) / N
+    let x = 0
+    let y = 0
+    for (let i = 0; i < coeffs.length; i++) {
+      const c = coeffs[i]
+      const ang = c.n * ph
+      x += c.re * Math.cos(ang) - c.im * Math.sin(ang)
+      y += c.re * Math.sin(ang) + c.im * Math.cos(ang)
+    }
+    out[2 * k] = x
+    out[2 * k + 1] = y
+  }
+  return out
+}
+
 /** 按模降序、模相等时 |n| 小者优先。资产按这个顺序存储，避免每次 buildScene 重排 */
 export function sortByAbs(coeffs: readonly Coefficient[]): Coefficient[] {
   return coeffs.slice().sort((a, b) => {

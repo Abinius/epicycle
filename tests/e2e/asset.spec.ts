@@ -165,6 +165,54 @@ test('冻结 → 导出 JSON → 干净的无痕上下文导入 → 再导出逐
   }
 })
 
+test('分享链接：生成 → 干净上下文打开 → 形状与参数复现（M4 出口标准）', async ({
+  page,
+  browser,
+}) => {
+  const errors: string[] = []
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text())
+  })
+  page.on('pageerror', (err) => errors.push(err.message))
+
+  await page.goto('/')
+  // 心形 + 等权化：让 theta 复现可被观测（不勾的话默认 theta 看不出区别）
+  await page.getByRole('checkbox', { name: /等权化/ }).check()
+  const termsOnSource = await page.getByTestId('terms').innerText()
+
+  await page.getByRole('button', { name: '生成并复制' }).click()
+  await expect.poll(() => page.getByTestId('share-url').inputValue(), { timeout: 5000 }).toMatch(
+    /\?a=.+&t=/,
+  )
+  const url = await page.getByTestId('share-url').inputValue()
+  expect(url).toContain('&t=')
+
+  // 全新上下文：IndexedDB 是空的，唯一输入是这条链接
+  const clean = await browser.newContext({ baseURL: test.info().project.use.baseURL })
+  try {
+    const fresh = await clean.newPage()
+    const freshErrors: string[] = []
+    fresh.on('console', (m) => {
+      if (m.type() === 'error') freshErrors.push(m.text())
+    })
+    fresh.on('pageerror', (err) => freshErrors.push(err.message))
+
+    await fresh.goto(url)
+    await expect(fresh.getByTestId('shape-name')).toContainText('分享链接')
+    // theta 复现：等权化被带过来
+    await expect(fresh.getByRole('checkbox', { name: /等权化/ })).toBeChecked()
+    // 系数复现：同一组频率，参与项数一致
+    await expect(fresh.getByTestId('terms')).toHaveText(termsOnSource)
+    // 形状画出
+    await expect.poll(() => paintedPixels(fresh), { timeout: 8000 }).toBeGreaterThan(200)
+    expect(freshErrors).toEqual([])
+  } finally {
+    await clean.close()
+  }
+
+  expect(errors).toEqual([])
+})
+
 test('导入坏文件给出诊断，删除把资产真的从本地库里去掉', async ({ page }) => {
   const errors: string[] = []
   page.on('console', (m) => {

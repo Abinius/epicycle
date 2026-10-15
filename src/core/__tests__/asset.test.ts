@@ -237,4 +237,10 @@ describe('导出与导入', () => {
     expect(r.ok).toBe(true)
     if (r.ok) expect(r.asset.source).toEqual({ type: 'formula' })
   })
+
+  it('shared 源类型（分享链接冻结而来）同样往返', () => {
+    const r = validateAsset({ ...makeAsset(), source: { type: 'shared' } })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.asset.source).toEqual({ type: 'shared' })
+  })
 })

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { TWO_PI } from '../complex.js'
-import { dft, isPowerOfTwo, sortByAbs } from '../dft.js'
+import { dft, isPowerOfTwo, reconstructPoints, sortByAbs } from '../dft.js'
 import type { Coefficient } from '../types.js'
 
 const N = 1024
@@ -124,6 +124,35 @@ describe('V-2 方波', () => {
       expect(Math.abs(at(c, n).im - ideal(n)) / Math.abs(ideal(n)), `n=${n} 与理想谱偏差`).toBeGreaterThan(1e-6)
     }
   })
+})
+
+describe('reconstructPoints', () => {
+  it('N 非 2 的幂即抛错', () => {
+    expect(() => reconstructPoints([], 3)).toThrow(/2 的幂/)
+  })
+
+  it('从系数重建的采样点还原原信号（全谱重建的 iDFT 侧）', () => {
+    const z = sample((t) => [Math.cos(t) + 0.3 * Math.cos(7 * t), Math.sin(3 * t)])
+    const c = dft(z, N)
+    const r = reconstructPoints(c, N)
+    for (const k of [0, 1, 33, 512, 1023]) {
+      expect(Math.abs(r[2 * k] - z[2 * k]), `k=${k} re`).toBeLessThan(1e-12)
+      expect(Math.abs(r[2 * k + 1] - z[2 * k + 1]), `k=${k} im`).toBeLessThan(1e-12)
+    }
+  })
+
+  it('往返：dft(reconstructPoints(c, N), N) 逐项还原 c（模式 Y 重算的地基）', () => {
+    const z = sample((t) => [Math.cos(t) + 0.3 * Math.cos(7 * t), Math.sin(3 * t) + 0.1])
+    const c = dft(z, N)
+    const back = dft(reconstructPoints(c, N), N)
+    expect(back.length).toBe(c.length)
+    for (let i = 0; i < c.length; i++) {
+      expect(back[i].n, `i=${i}`).toBe(c[i].n)
+      expect(Math.abs(back[i].re - c[i].re), `i=${i} re`).toBeLessThan(1e-12)
+      expect(Math.abs(back[i].im - c[i].im), `i=${i} im`).toBeLessThan(1e-12)
+    }
+  })
+
 })
 
 describe('sortByAbs', () => {
