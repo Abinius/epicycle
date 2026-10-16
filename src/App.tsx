@@ -643,15 +643,15 @@ export default function App() {
       </main>
 
       <footer className="flex items-center gap-3 border-t border-hairline px-3 py-2 text-xs text-mist/40 md:px-5">
-        <span>{t('全部在浏览器本地计算，不上传、不收集、无需账号')}</span>
         <button
           type="button"
           data-testid="help-open"
           onClick={() => setHelp(true)}
-          className="ml-auto shrink-0 rounded border border-hairline px-2 py-0.5 hover:border-sage/60 hover:text-mist"
+          className="shrink-0 rounded border border-hairline px-2 py-0.5 hover:border-sage/60 hover:text-mist"
         >
           {t('关于与帮助')}
         </button>
+        <span className="ml-auto text-right">{t('全部在浏览器本地计算，不上传、不收集、无需账号')}</span>
       </footer>
 
       <HelpDialog open={help} onClose={() => setHelp(false)} />
