@@ -39,7 +39,7 @@ export function HelpDialog({ open, onClose }: { open: boolean; onClose: () => vo
       ref={ref}
       aria-labelledby="help-title"
       onClose={onClose}
-      className="max-h-[85dvh] w-[min(92vw,42rem)] overflow-y-auto rounded-lg border border-hairline bg-ink2 p-5 text-sm text-mist backdrop:bg-ink/80"
+      className="m-auto max-h-[85dvh] w-[min(92vw,42rem)] overflow-y-auto rounded-lg border border-hairline bg-ink2 p-5 text-sm text-mist backdrop:bg-ink/80"
     >
       <div className="flex items-baseline justify-between gap-4">
         <h2 id="help-title" className="font-serif text-lg tracking-wide">
