@@ -643,7 +643,7 @@ export default function App() {
       </main>
 
       <footer className="flex flex-col items-center gap-1 border-t border-hairline px-3 py-2 text-xs text-mist/40 md:px-5">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-center gap-3">
           <button
             type="button"
             data-testid="help-open"
@@ -652,7 +652,7 @@ export default function App() {
           >
             {t('关于与帮助')}
           </button>
-          <nav className="hidden items-center gap-2 sm:flex" aria-label={t('友情链接')}>
+          <nav className="flex items-center gap-2" aria-label={t('友情链接')}>
             <span className="text-mist/30">{t('友情链接')}</span>
             <a
               href="https://www.xiaohongshu.com/user/profile/5e1eff3d000000000100ac79?xhsshare=userQrCode&exSource="
