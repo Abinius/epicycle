@@ -80,3 +80,36 @@ body {
   outline: 2px solid var(--color-sage);
   outline-offset: 2px;
 }
+
+/*
+ * 滚动条（右侧面板上下滚、公式左右滚）。系统默认那条又宽、带箭头、还有一圈亮轨道，
+ * 在这套暗色扁平界面里很扎眼，统一压成「透明轨道 + 一根低对比的圆角滑块」。
+ *
+ * 两套写法并存，各管一段：标准属性 scrollbar-width/color 是主流引擎都认的口径
+ * （含 Chromium 的 overlay 模式，那种模式下 ::-webkit-scrollbar 是不生效的）；
+ * ::-webkit-scrollbar 兜住更老的 Chromium 与 Safari。⚠️ Chromium 121+ 只要读到那两个
+ * 标准属性就会忽略 ::-webkit-scrollbar，所以下面这组只对老引擎起作用，不是失效。
+ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-mist) 28%, transparent) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-mist) 22%, transparent);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--color-mist) 38%, transparent);
+}
