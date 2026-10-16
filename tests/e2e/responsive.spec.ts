@@ -63,3 +63,20 @@ test('桌面：两栏布局，导出默认 1080p', async ({ page }) => {
   const value = (await page.getByLabel('参数面板', { exact: true }).boundingBox())!
   expect(value.x).toBeGreaterThan(stage.x + stage.width - 1)
 })
+
+test('页面纵向不溢出：footer 下方没有可滚动的空白', async ({ page }) => {
+  for (const [w, h] of [
+    [1280, 800],
+    [768, 900],
+    [390, 780],
+  ] as const) {
+    await page.setViewportSize({ width: w, height: h })
+    await page.goto('/')
+    await expect(page.getByTestId('stage')).toBeVisible()
+    // sr-only 的文件输入与 KaTeX 的 .katex-mathml 都是 position:absolute：
+    // 祖先若不是 containing block，静态定位 + overflow:hidden 也管不住它们，
+    // 它们会甩到文档底部，把页面撑出一大截空白（footer 下面能一直往下滚）
+    const overflow = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)
+    expect(overflow, `${w}×${h} 页面被撑高了`).toBeLessThanOrEqual(1)
+  }
+})

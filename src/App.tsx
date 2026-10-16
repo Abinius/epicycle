@@ -464,7 +464,10 @@ export default function App() {
         </button>
       </header>
 
-      <main className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-2 md:grid md:grid-cols-[minmax(0,1fr)_344px] md:gap-4 md:overflow-hidden md:p-4">
+      {/* relative 不是装饰：sr-only 与 KaTeX 的 .katex-mathml 都是 position:absolute，
+          而静态定位的祖先即使 overflow:hidden 也管不住它们——会甩到文档底部，把页面撑出
+          一大截空白（footer 下面能一直往下滚）。给了 containing block，overflow 才真的裁得住 */}
+      <main className="relative flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-2 md:grid md:grid-cols-[minmax(0,1fr)_344px] md:gap-4 md:overflow-hidden md:p-4">
         <section
           aria-label={t('渲染画布')}
           className="sticky top-0 z-10 h-[42dvh] min-h-52 min-w-0 shrink-0 overflow-hidden rounded-lg border border-hairline bg-paper md:static md:h-auto md:min-h-72"
