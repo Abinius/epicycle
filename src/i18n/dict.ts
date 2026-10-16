@@ -37,6 +37,8 @@ const EN: Record<string, string> = {
   '全部在浏览器本地计算，不上传、不收集、无需账号':
     'Everything runs locally in your browser — nothing is uploaded or collected, no account needed.',
   关于与帮助: 'About & help',
+  友情链接: 'Links',
+  '七月的角落': "July's Corner",
 
   // ---- 素材 ----
   素材来源: 'Source',
