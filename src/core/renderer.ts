@@ -24,6 +24,7 @@ export interface DrawTarget {
   stroke(): void
   fill(): void
   fillRect(x: number, y: number, w: number, h: number): void
+  clearRect(x: number, y: number, w: number, h: number): void
 }
 
 /** 坐标与样式全部显式传入：渲染器不读全局主题、不读时钟、不读随机数 */
@@ -79,6 +80,9 @@ export function renderFrame(target: DrawTarget, scene: Scene, t: number, o: Rend
   // 任何不在原点附近的形状（上传的 SVG、自带坐标框的预置）都会被推出画布。
   const px = (f: Four) => cx + (f.re - scene.center.re) * R
   const py = (f: Four) => cy - (f.im - scene.center.im) * R // 数学 y 向上，画布 y 向下
+
+  // 先清屏再画：目标可能被复用（导出逐帧共用一个 surface），背景为 null 时前一帧不能残留
+  target.clearRect(0, 0, o.width, o.height)
 
   target.save()
 

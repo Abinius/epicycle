@@ -372,6 +372,10 @@ const DIAGNOSTIC_EN: Record<number, { message: string; hint: string }> = {
     message: 'The deform did not finish, so no derived asset was created',
     hint: 'Try again; if it keeps failing, save the current shape with “Freeze as asset” first',
   },
+  18: {
+    message: 'The path data cannot be parsed — sampling aborted',
+    hint: 'The path d may be truncated or hold an illegal command; validate it with an editor or svgo',
+  },
 }
 
 function firstNumber(s: string): number | null {

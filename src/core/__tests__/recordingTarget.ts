@@ -32,6 +32,7 @@ export function makeTarget() {
     lineTo: (x: number, y: number) => rec('lineTo', x, y),
     arc: (x: number, y: number, r: number, a0: number, a1: number) => rec('arc', x, y, r, a0, a1),
     fillRect: (x: number, y: number, w: number, h: number) => rec('fillRect', x, y, w, h),
+    clearRect: (x: number, y: number, w: number, h: number) => rec('clearRect', x, y, w, h),
   } as unknown as DrawTarget
   for (const key of STYLE_KEYS) {
     Object.defineProperty(target, key, {

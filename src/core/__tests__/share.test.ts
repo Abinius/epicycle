@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { dft } from '../dft.js'
 import { decodeShare, decodeTheta, encodeShare, encodeTheta } from '../share.js'
-import { Q_STEP } from '../asset.js'
+import { Q_REL } from '../asset.js'
 import { defaultTheta, type Coefficient, type Theta } from '../types.js'
 
 const COEFFS: Coefficient[] = [
@@ -80,11 +80,12 @@ describe('encodeShare / decodeShare', () => {
     const back = decodeShare(encodeShare(COEFFS, theta))!
     expect(back).not.toBeNull()
     expect(back.theta).toEqual(theta)
-    // 短码是 Int16 量化，n 精确，re/im 在一个量化步长内
+    // 短码是 Int16 量化：n 精确，re/im 在按最大模算的相对误差上界内
+    const limit = Q_REL * COEFFS.reduce((m, c) => Math.max(m, Math.abs(c.re), Math.abs(c.im)), 0) + 1e-9
     expect(back.coeffs.map((c) => c.n)).toEqual(COEFFS.map((c) => c.n))
     back.coeffs.forEach((c, i) => {
-      expect(Math.abs(c.re - COEFFS[i].re)).toBeLessThanOrEqual(Q_STEP + 1e-12)
-      expect(Math.abs(c.im - COEFFS[i].im)).toBeLessThanOrEqual(Q_STEP + 1e-12)
+      expect(Math.abs(c.re - COEFFS[i].re)).toBeLessThanOrEqual(limit)
+      expect(Math.abs(c.im - COEFFS[i].im)).toBeLessThanOrEqual(limit)
     })
   })
 

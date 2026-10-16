@@ -130,6 +130,17 @@ export function diagnose(input: DiagnoseInput): Diagnostic[] {
 }
 
 /**
+ * 18：路径数据非法，采样在 Worker 里抛错中断（d 被截断、含非法指令）。
+ * 采样链路第 10 条，编号避开留给导出的 10–11。
+ */
+export const SAMPLE_FAILED: Diagnostic = {
+  id: 18,
+  severity: 'error',
+  message: '路径数据无法解析，采样中断了',
+  hint: '路径 d 可能被截断或含非法指令，用编辑器或 svgo 校验后重试',
+}
+
+/**
  * 资产库与导入的诊断（技术文档 §10 表的 12 条起）。与采样链路分开成组，
  * 但共用 Diagnostic 类型与 DiagnosticList 组件——用户可见的文案仍然只有一个出处。
  */

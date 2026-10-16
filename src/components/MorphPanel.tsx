@@ -30,6 +30,9 @@ export function MorphPanel({
   const t = useT()
   const enough = assets.length >= 2
 
+  // 两端不能重合：a===b 时 blend === a，再冻结会拿 a 的 id 静默覆盖原资产（名字/来源被改写）
+  const pickOther = (taken: string) => assets.find((x) => x.id !== taken)?.id ?? taken
+
   return (
     <section aria-label={t('形状过渡')} className="flex flex-col gap-3 border-t border-hairline pt-4">
       <div className="flex items-baseline justify-between gap-2">
@@ -64,7 +67,11 @@ export function MorphPanel({
               aria-label={t('过渡起点')}
               className={SELECT}
               value={morph.a}
-              onChange={(e) => onMorph({ ...morph, a: e.target.value })}
+              onChange={(e) => {
+                const a = e.target.value
+                const b = a === morph.b ? pickOther(a) : morph.b
+                onMorph({ ...morph, a, b })
+              }}
             >
               {assets.map((x) => (
                 <option key={x.id} value={x.id}>
@@ -80,7 +87,11 @@ export function MorphPanel({
               aria-label={t('过渡终点')}
               className={SELECT}
               value={morph.b}
-              onChange={(e) => onMorph({ ...morph, b: e.target.value })}
+              onChange={(e) => {
+                const b = e.target.value
+                const a = b === morph.a ? pickOther(b) : morph.a
+                onMorph({ ...morph, a, b })
+              }}
             >
               {assets.map((x) => (
                 <option key={x.id} value={x.id}>

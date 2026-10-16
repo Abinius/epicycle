@@ -106,8 +106,14 @@ describe('pickPlan 降级链（PRD §5.1）', () => {
   })
 
   it('GIF 与 PNG 不依赖任何能力，永远可用', () => {
-    expect(pickPlan('gif', NONE, at(true))).toEqual({ path: 'gif', ext: 'gif', tag: 'gif' })
+    expect(pickPlan('gif', NONE, at(false))).toEqual({ path: 'gif', ext: 'gif', tag: 'gif' })
     expect(pickPlan('png', NONE, at(true))).toEqual({ path: 'png', ext: 'zip', tag: 'png' })
+  })
+
+  it('GIF + 透明 → PNG 序列并给出说明（GIF 没有 alpha 通道，交黑底 GIF 比不导出更糟）', () => {
+    const p = pickPlan('gif', FULL, at(true))
+    expect(p).toMatchObject({ path: 'png', ext: 'zip', tag: 'png' })
+    expect(p.note).toMatch(/透明|alpha/)
   })
 })
 

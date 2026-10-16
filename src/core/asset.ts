@@ -6,9 +6,12 @@ import { ASSET_DIAGNOSTICS, type Diagnostic } from './diagnostic.js'
 export const SCHEMA = 'fourierboard/asset@1.0' as const
 export const ENGINE = 'fb@0.1.0'
 
-/** 短码的量化范围与步长：Int16 覆盖 [-8, 8]，步长 ≈ 4.9e-5（亚像素级） */
+/** 短码量化：Int16 网格覆盖 [-scale, scale]，scale 是 Q_RANGE 的 2 的幂倍 */
 export const Q_RANGE = 8
-export const Q_STEP = (2 * Q_RANGE) / 32767
+/** 相对误差上界：尺度按 2 的幂贴紧最大模（最坏差一倍），再除 2^15 的网格 */
+export const Q_REL = 4 / 32767
+/** 短码头部的魔数。头占 2 字节，故新码字节数 ≡ 2 (mod 6)，与 0.1.0 的无头旧码（≡ 0）区分 */
+const HEADER_MAGIC = 0xf4
 
 function clampInt16(v: number): number {
   return Math.max(-32767, Math.min(32767, Math.trunc(v)))
@@ -103,7 +106,8 @@ export function createAsset(input: {
   const nMax = Math.floor(coeffs.length / 2)
   return {
     schema: SCHEMA,
-    id: `fa_${sum.slice(0, 6)}`,
+    // id 取完整 32 位指纹：截短到 6 位（24 bit）会让两组不同系数撞同一前缀，put 静默覆盖
+    id: `fa_${sum}`,
     name: input.name,
     created_at: input.createdAt,
     source: input.source,
@@ -115,29 +119,48 @@ export function createAsset(input: {
   }
 }
 
-/** 每个系数 6 字节：int16 n + int16 量化 re + int16 量化 im */
+/**
+ * 量化尺度：Q_RANGE 的 2 的幂倍，2 的幂贴紧最大模。固定 ±8 会把坐标量级超过 8 的素材
+ * （SVG 用户单位、手绘像素坐标几乎都是几十到上千）截成平的——分享出去的就是另一个形状。
+ */
+function quantScale(coeffs: readonly Coefficient[]): number {
+  let maxAbs = 0
+  for (const c of coeffs) maxAbs = Math.max(maxAbs, Math.abs(c.re), Math.abs(c.im))
+  if (!(maxAbs > 0)) return Q_RANGE
+  const exp = Math.max(-127, Math.min(127, Math.ceil(Math.log2(maxAbs / Q_RANGE))))
+  return Q_RANGE * 2 ** exp
+}
+
+/** 每个系数 6 字节：int16 n + int16 量化 re + int16 量化 im；前面带 2 字节尺度头 */
 export function toShortCode(coeffs: readonly Coefficient[]): string {
-  const bytes = new Uint8Array(coeffs.length * 6)
+  const scale = quantScale(coeffs)
+  const bytes = new Uint8Array(coeffs.length * 6 + 2)
+  bytes[0] = HEADER_MAGIC
+  bytes[1] = Math.round(Math.log2(scale / Q_RANGE)) & 0xff
   for (let i = 0; i < coeffs.length; i++) {
     const c = coeffs[i]
-    const o = i * 6
+    const o = 2 + i * 6
     setInt16(bytes, o, c.n)
-    setInt16(bytes, o + 2, (c.re / Q_RANGE) * 32767)
-    setInt16(bytes, o + 4, (c.im / Q_RANGE) * 32767)
+    setInt16(bytes, o + 2, (c.re / scale) * 32767)
+    setInt16(bytes, o + 4, (c.im / scale) * 32767)
   }
   return base64UrlEncode(bytes)
 }
 
+/** 新码带 2 字节尺度头；0.1.0 的无头旧码按 ±Q_RANGE 解，一条都解不出就返回空 */
 export function fromShortCode(code: string): Coefficient[] {
   const bytes = base64UrlDecode(code)
-  const n = Math.floor(bytes.length / 6)
+  const head = bytes.length % 6 === 2 && bytes[0] === HEADER_MAGIC ? 2 : 0
+  const raw = head ? bytes[1] : 0
+  const scale = head ? Q_RANGE * 2 ** (raw > 127 ? raw - 256 : raw) : Q_RANGE
+  const n = Math.floor((bytes.length - head) / 6)
   const out: Coefficient[] = []
   for (let i = 0; i < n; i++) {
-    const o = i * 6
+    const o = head + i * 6
     out.push({
       n: getInt16(bytes, o),
-      re: (getInt16(bytes, o + 2) / 32767) * Q_RANGE,
-      im: (getInt16(bytes, o + 4) / 32767) * Q_RANGE,
+      re: (getInt16(bytes, o + 2) / 32767) * scale,
+      im: (getInt16(bytes, o + 4) / 32767) * scale,
     })
   }
   return out

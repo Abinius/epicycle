@@ -135,6 +135,18 @@ test('上传 SVG：出动画、公式同步换源，坏文件给出诊断', asyn
   await expect(page.getByLabel('预检诊断')).toContainText('未找到路径数据')
   await expect(page.getByText('预检未通过')).toBeVisible()
   expect(await page.getByTestId('formula').innerText()).not.toBe(uploaded)
+  const presetFormula = await page.getByTestId('formula').innerText()
+
+  // path 被截断：采样在 Worker 里抛错。必须报出诊断，且画面回到预置形状——
+  // 绝不能把上一份素材的系数挂在新的文件名下（冻结一下就是一份张冠李戴的资产）
+  await input.setInputFiles({
+    name: 'broken.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0 L10"/></svg>'),
+  })
+  await expect(page.getByLabel('预检诊断')).toContainText('路径数据无法解析', { timeout: 15_000 })
+  await expect(page.getByText('预检未通过')).toBeVisible()
+  expect(await page.getByTestId('formula').innerText(), '坏 SVG 不能沿用上一份素材的系数').toBe(presetFormula)
 
   // 换回预置形状：上传状态被清掉
   await page.getByRole('combobox', { name: '形状' }).selectOption('heart')

@@ -24,10 +24,12 @@ export interface DeriveReq {
 
 export type WorkerReq = PrepareReq | DeriveReq
 
+/** 采样结果。成功带 result；路径数据非法、采样抛错时 failed 为真，不带 result */
 export interface PrepareRes {
   id: number
   kind: 'prepare'
-  result: PreparedSvg
+  failed: boolean
+  result?: PreparedSvg
 }
 
 /** 派生结果：新系数 + 变换后的采样点（冻结派生资产要后者算包围盒） */

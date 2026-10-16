@@ -50,14 +50,13 @@ export function h264Codec(width: number, height: number): string {
 }
 
 const pngPlan = (note?: string): Plan => ({ path: 'png', ext: 'zip', tag: 'png', ...(note ? { note } : {}) })
-const gifPlan = (): Plan => ({ path: 'gif', ext: 'gif', tag: 'gif' })
 
 /**
  * 能力探测 → 降级链（PRD §5.1）：
  *
  *   MP4  ：E2(H.264) → E1(VP9/WebM) → E1(VP8/WebM) → E5(PNG 序列)
  *   WebM ：E1(VP9) → E1(VP8) → E5(PNG 序列)
- *   GIF / PNG：纯 JS 与 Canvas，永远可用
+ *   GIF / PNG：纯 JS 与 Canvas，永远可用；GIF 没有 alpha 通道，透明时降到 PNG 序列
  *
  * 每降一级都带 note。透明背景单独一条：H.264 没有 alpha 通道，要么换容器、要么换 PNG 序列，
  * **绝不静默丢掉透明**（PRD §5.3）。
@@ -68,7 +67,10 @@ export function pickPlan(
   opt: { transparent: boolean; width: number; height: number },
 ): Plan {
   if (format === 'png') return pngPlan()
-  if (format === 'gif') return gifPlan()
+  // GIF 没有 alpha 通道：透明一勾就降到 PNG 序列，绝不交出一份黑底的 GIF
+  if (format === 'gif') {
+    return opt.transparent ? pngPlan('GIF 没有透明通道，已改用 PNG 序列（保留 alpha）。') : { path: 'gif', ext: 'gif', tag: 'gif' }
+  }
 
   const webm: Plan | null = !caps.recorder
     ? null

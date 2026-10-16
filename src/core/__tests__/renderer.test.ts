@@ -104,6 +104,15 @@ describe('V-6 渲染纯度', () => {
     expect(filled.ops.filter((op) => op[0] === 'fillRect')).toEqual([['fillRect', 0, 0, 640, 480]])
   })
 
+  it('每帧先清屏一次：目标被复用时前一帧不留残影（透明导出的前提）', () => {
+    for (const background of [null, '#FBFAF7'] as Array<string | null>) {
+      const { target, ops } = makeTarget()
+      renderFrame(target, SCENE, 0.1, { ...renderOptions(640, 480, 0), background })
+      expect(ops[0], `background=${background}`).toEqual(['clearRect', 0, 0, 640, 480])
+      expect(COUNT(ops, 'clearRect')).toBe(1)
+    }
+  })
+
   it('trail 决定轨迹采样点数，0 表示不画轨迹', () => {
     const trail = makeTarget()
     renderFrame(trail.target, SCENE, 0.2, {

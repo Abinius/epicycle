@@ -69,9 +69,17 @@ test('导出面板：换画幅按短边换算，宽高恒为偶数（H.264 不�
   await expect(size).toContainText('3840 × 2160')
 })
 
-test('透明背景：MP4 拿不到 alpha，面板在点导出之前就把降级说明摆出来', async ({ page }) => {
+test('透明背景：面板在点导出之前就把降级说明摆出来', async ({ page }) => {
   await page.goto('/')
   await page.getByLabel('背景').selectOption('clear')
-  // 要么降到 WebM（带说明），要么降到 PNG 序列（带说明）——总之不能是无声无息
+  // MP4 拿不到 alpha：要么降到 WebM，要么降到 PNG 序列——总之不能是无声无息
   await expect(page.getByTestId('export-note')).toContainText('透明', { timeout: 20_000 })
+
+  // GIF 也没有 alpha 通道：同样得降级并说明，不能交出一份黑底的 GIF
+  await page.getByLabel('导出格式').selectOption('gif')
+  await expect(page.getByTestId('export-note')).toContainText(/透明|PNG 序列/)
+
+  // 不透明的 GIF 是能力之内的事，不该带无谓的说明
+  await page.getByLabel('背景').selectOption('paper')
+  await expect(page.getByTestId('export-note')).toHaveCount(0)
 })

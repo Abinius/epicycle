@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  Q_RANGE,
-  Q_STEP,
+  Q_REL,
   SCHEMA,
   SCHEMA_MAJOR,
   base64UrlDecode,
@@ -60,7 +59,7 @@ describe('createAsset', () => {
     expect(a.schema).toBe(SCHEMA)
     expect(a.coeffs.map((c) => c.n)).toEqual([3, -3, 11, 0])
     expect(a.domain).toEqual({ n_min: -2, n_max: 2 })
-    expect(a.id).toBe(`fa_${a.meta.checksum.slice(0, 6)}`)
+    expect(a.id).toBe(`fa_${a.meta.checksum}`)
     expect(a.meta.checksum).toBe(checksum(a.coeffs))
     expect(a.meta.dft_ms).toBe(12.5)
     expect(a.source).toEqual({ type: 'formula' })
@@ -74,33 +73,61 @@ describe('createAsset', () => {
 })
 
 describe('短码（Int16 量化 + base64url）', () => {
-  it('往返：n 精确，re/im 误差不超过一个量化步长', () => {
+  /** 量化按最大模定尺度，所以误差上界也要按最大模算 */
+  const bound = (cs: Coefficient[]) =>
+    Q_REL * cs.reduce((m, c) => Math.max(m, Math.abs(c.re), Math.abs(c.im)), 0) + 1e-9
+
+  const roundTrip = (coeffs: Coefficient[]): Coefficient[] => fromShortCode(toShortCode(coeffs))
+
+  it('往返：n 精确，re/im 的误差不超过量化网格', () => {
     const coeffs: Coefficient[] = [
       { n: -100, re: 7.9, im: -8 },
       { n: 3, re: 0.123456, im: -0.0001 },
       { n: 0, re: 0, im: 0 },
     ]
-    const back = fromShortCode(toShortCode(coeffs))
+    const back = roundTrip(coeffs)
     expect(back.map((c) => c.n)).toEqual([-100, 3, 0])
+    const limit = bound(coeffs)
     back.forEach((b, i) => {
-      expect(Math.abs(b.re - coeffs[i].re)).toBeLessThanOrEqual(Q_STEP + 1e-12)
-      expect(Math.abs(b.im - coeffs[i].im)).toBeLessThanOrEqual(Q_STEP + 1e-12)
+      expect(Math.abs(b.re - coeffs[i].re), `#${i} re`).toBeLessThanOrEqual(limit)
+      expect(Math.abs(b.im - coeffs[i].im), `#${i} im`).toBeLessThanOrEqual(limit)
     })
   })
 
-  it('超出量化范围时钳到 ±Q_RANGE，n 钳到 Int16 边界', () => {
-    const back = fromShortCode(toShortCode([{ n: 32767, re: 100, im: -100 }, { n: -32768, re: 8, im: -8 }]))
-    expect(back[0].n).toBe(32767)
-    expect(Math.abs(back[0].re - Q_RANGE)).toBeLessThanOrEqual(Q_STEP)
-    expect(Math.abs(back[0].im + Q_RANGE)).toBeLessThanOrEqual(Q_STEP)
-    expect(back[1].n).toBe(-32767)
+  it('坐标量级超过 Q_RANGE 时按最大模定尺度，不再钳成平的一团', () => {
+    // 回归：上传的 SVG 用户单位几乎都是几十起，固定 ±8 会把 c₀ 从 149 压成 8
+    const coeffs: Coefficient[] = [
+      { n: 0, re: 149, im: -75.5 },
+      { n: 1, re: 57.7, im: -12.3 },
+      { n: -1, re: 57.7, im: 12.3 },
+    ]
+    const back = roundTrip(coeffs)
+    const limit = bound(coeffs)
+    back.forEach((b, i) => {
+      expect(Math.abs(b.re - coeffs[i].re), `#${i} re`).toBeLessThanOrEqual(limit)
+      expect(Math.abs(b.im - coeffs[i].im), `#${i} im`).toBeLessThanOrEqual(limit)
+    })
+    expect(back[0].re).toBeCloseTo(149, 1)
+    expect(back[0].im).toBeCloseTo(-75.5, 1)
   })
 
-  it('截断的短码丢弃尾部不完整记录', () => {
-    const code = toShortCode([{ n: 1, re: 0.5, im: 0 }, { n: 2, re: 0, im: 1 }])
-    expect(fromShortCode(code.slice(0, 4)).length).toBe(0)
-    expect(fromShortCode(code.slice(0, 12)).length).toBe(1)
-    expect(fromShortCode(code).length).toBe(2)
+  it('n 钳到 Int16 边界，所有系数落在同一个量化网格内', () => {
+    const coeffs: Coefficient[] = [
+      { n: 32767, re: 1e-6, im: -1e-6 },
+      { n: -32768, re: 8, im: -8 },
+    ]
+    const back = roundTrip(coeffs)
+    const limit = bound(coeffs)
+    expect(back.map((c) => c.n)).toEqual([32767, -32767])
+    back.forEach((b, i) => {
+      expect(Math.abs(b.re - coeffs[i].re), `#${i} re`).toBeLessThanOrEqual(limit)
+      expect(Math.abs(b.im - coeffs[i].im), `#${i} im`).toBeLessThanOrEqual(limit)
+    })
+  })
+
+  it('空输入与空串都解不出系数', () => {
+    expect(roundTrip([])).toEqual([])
+    expect(fromShortCode('')).toEqual([])
   })
 })
 

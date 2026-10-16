@@ -91,6 +91,44 @@ describe('extractPaths', () => {
   it('没有 path 元素时返回空数组', () => {
     expect(extractPaths('<svg><rect width="1" height="1"/></svg>')).toEqual([])
   })
+
+  it('跳过引用容器里的 path：defs/symbol/clipPath/mask/marker 的内容不直接画出来', () => {
+    for (const container of ['defs', 'symbol', 'clipPath', 'mask', 'marker']) {
+      const svg = `<svg><${container}><path d="M9 9"/></${container}><path d="M1 1"/></svg>`
+      expect(extractPaths(svg).map((p) => p.d), container).toEqual(['M1 1'])
+    }
+  })
+
+  it('display:none 整棵子树都跳过，后代无法撤销', () => {
+    expect(extractPaths('<path d="M0 0" display="none"/>')).toEqual([])
+    const svg = '<g display="none"><g><path d="M0 0"/></g></g><path d="M1 1"/>'
+    expect(extractPaths(svg).map((p) => p.d)).toEqual(['M1 1'])
+  })
+
+  it('opacity:0 整棵子树跳过', () => {
+    expect(extractPaths('<g opacity="0"><path d="M0 0"/></g>')).toEqual([])
+    // 非零透明度照收
+    expect(extractPaths('<g opacity="0.5"><path d="M0 0"/></g>').map((p) => p.d)).toEqual(['M0 0'])
+  })
+
+  it('visibility:hidden 跳过，但后代的 visibility:visible 能把它撤回来', () => {
+    expect(extractPaths('<g visibility="hidden"><path d="M0 0"/></g>')).toEqual([])
+    const svg = '<g visibility="hidden"><path d="M0 0"/><path d="M1 1" visibility="visible"/></g>'
+    expect(extractPaths(svg).map((p) => p.d)).toEqual(['M1 1'])
+  })
+
+  it('非自闭合标签闭合后精确还原变换，不被旁支的闭合标签提前弹掉', () => {
+    // 旧实现在 </path> 处把 <g> 的变换提前弹掉了：同一个 <g> 里第二个 path 会丢掉 scale
+    const svg = '<g transform="scale(2)"><path d="M1 0"></path><path d="M2 0"/></g>'
+    const paths = extractPaths(svg)
+    expect(paths).toHaveLength(2)
+    expect(paths[0].matrix).toEqual([2, 0, 0, 2, 0, 0])
+    expect(paths[1].matrix, '同一组内后续 path 仍在 scale 之下').toEqual([2, 0, 0, 2, 0, 0])
+
+    // 分组结束后，分组外的 path 不受影响
+    const after = extractPaths('<g transform="scale(2)"><path d="M1 0"></path></g><path d="M1 0"/>')
+    expect(after[1].matrix).toBe(null)
+  })
 })
 
 describe('findForbidden / countTags', () => {

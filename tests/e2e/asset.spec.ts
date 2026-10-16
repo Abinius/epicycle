@@ -111,7 +111,7 @@ test('冻结 → 刷新页面 → 打开：资产留在本地，公式逐字一�
   const rows = page.getByTestId('asset-row')
   await expect(rows).toHaveCount(1)
   await expect(rows.first()).toContainText('signature.svg')
-  const shortCode = ((await rows.first().innerText()).match(/fa_[0-9a-f]{6}/) ?? [''])[0]
+  const shortCode = ((await rows.first().innerText()).match(/fa_[0-9a-f]{8}/) ?? [''])[0]
   expect(shortCode, '资产行里应当有 fa_ 短码').not.toBe('')
 
   // 刷新：内存全丢，只剩 IndexedDB。资产还在，说明真写进去了
@@ -291,6 +291,82 @@ test('过渡（Morph）：两端与各自原图逐字一致，中间态是第三
   await page.getByTestId('morph-toggle').uncheck()
   await expect(page.getByTestId('shape-name')).not.toContainText('过渡')
 
+  expect(errors).toEqual([])
+})
+
+test('过渡态派生：以过渡混合形状为父，而不是过渡前打开的那份（bug 4 回归）', async ({ page }) => {
+  const errors: string[] = []
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text())
+  })
+  page.on('pageerror', (err) => errors.push(err.message))
+
+  await page.goto('/')
+
+  // 冻结心形与正方形两份资产
+  await page.getByRole('button', { name: '冻结为资产' }).click()
+  await page.getByRole('combobox', { name: '形状' }).selectOption('square')
+  await expect(page.getByTestId('shape-name')).toContainText('正方形')
+  await page.getByRole('button', { name: '冻结为资产' }).click()
+  await expect(page.getByTestId('asset-row')).toHaveCount(2)
+
+  // 打开心形——此时 opened=心形，画面是心形
+  await page.getByTestId('asset-row').filter({ hasText: '心形' }).getByRole('button', { name: '打开' }).click()
+  await expect(page.getByTestId('shape-name')).toContainText('心形')
+
+  // 启用过渡：画面换成混合形状，但 opened 仍是心形——这正是 bug 4 的触发条件
+  await page.getByTestId('morph-toggle').check()
+  await page.getByLabel('过渡起点').selectOption({ label: '心形' })
+  await page.getByLabel('过渡终点').selectOption({ label: '正方形' })
+  await page.getByRole('slider', { name: '过渡 w' }).fill('0.5')
+  await expect(page.getByTestId('shape-name')).toContainText('过渡')
+
+  // 非均匀缩放派生（均匀缩放会被 viewScale 归一掉、测不出真变形）
+  await page.getByRole('slider', { name: '宽度' }).fill('2')
+  await page.getByRole('slider', { name: '高度' }).fill('0.5')
+  await page.getByRole('button', { name: /派生为/ }).click()
+
+  // 修复后父资产是过渡混合形状（要先冻结成新资产）+ 子（派生结果）：+2 = 4 行。
+  // 修复前拿 opened（心形）当父，父已在库里，只 +1 = 3 行——这正是 bug。
+  await expect(page.getByTestId('asset-row')).toHaveCount(4)
+  const names = await page.getByTestId('asset-row').allInnerTexts()
+  expect(names.some((n) => n.includes('x2·y0.5')), '派生子带变换标签').toBe(true)
+
+  expect(errors).toEqual([])
+})
+
+test('过渡两端不可重合：选成同一份时另一端自动换开，不留给混合态撞父资产 id（bug 6 回归）', async ({ page }) => {
+  const errors: string[] = []
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text())
+  })
+  page.on('pageerror', (err) => errors.push(err.message))
+
+  await page.goto('/')
+  await page.getByRole('button', { name: '冻结为资产' }).click()
+  await page.getByRole('combobox', { name: '形状' }).selectOption('square')
+  await expect(page.getByTestId('shape-name')).toContainText('正方形')
+  await page.getByRole('button', { name: '冻结为资产' }).click()
+  await expect(page.getByTestId('asset-row')).toHaveCount(2)
+
+  await page.getByTestId('morph-toggle').check()
+  const aSel = page.getByLabel('过渡起点')
+  const bSel = page.getByLabel('过渡终点')
+  await expect(page.getByTestId('shape-name')).toContainText('过渡')
+
+  // 把起点选成与终点相同：另一端必须自动换开，a!==b
+  const bVal = await bSel.inputValue()
+  await aSel.selectOption(bVal)
+  expect(await aSel.inputValue()).not.toBe(await bSel.inputValue())
+
+  // 反方向：把终点选成与当前起点相同，起点自动换开
+  const aVal = await aSel.inputValue()
+  await bSel.selectOption(aVal)
+  expect(await aSel.inputValue()).not.toBe(await bSel.inputValue())
+
+  // 仍是有效过渡，画面照常绘制
+  await expect(page.getByTestId('shape-name')).toContainText('过渡')
+  await expect.poll(() => paintedPixels(page), { timeout: 8000 }).toBeGreaterThan(200)
   expect(errors).toEqual([])
 })
 

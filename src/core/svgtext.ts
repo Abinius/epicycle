@@ -135,31 +135,60 @@ export function matrixFromTransform(text: string): Matrix | null {
   return found ? m : null
 }
 
-const CONTAINERS = new Set(['svg', 'g', 'a', 'switch', 'defs', 'symbol', 'marker', 'clippath', 'mask'])
+/**
+ * 只供引用的容器：内容不直接画在画面上（要靠 use / clip-path / mask 引用），一律不进形状。
+ * 这里不解析这些引用，收进来只会得到位置错误的几何。
+ */
+const REFERENCED = new Set(['defs', 'symbol', 'marker', 'clippath', 'mask'])
 
-/** 抽出所有 path 的 d 与它所在祖先链上的累加变换 */
+/**
+ * 抽出所有 path 的 d 与它所在祖先链上的累加变换。
+ *
+ * 只收「会画出来」的 path：引用容器里的、display:none 的、opacity:0 的、visibility:hidden 的
+ * 都跳过——把隐藏几何算进形状会让上传的图形凭空多出几笔。stroke/fill 归 CSS 继承管，
+ * 这里不做绘制判定（判错会丢掉真正可见的几何，比多收一笔更糟）。
+ */
 export function extractPaths(svg: string): ExtractedPath[] {
   const out: ExtractedPath[] = []
-  const stack: Matrix[] = []
+  /** 每个未闭合元素压一帧，闭合时精确还原——否则非容器的闭合标签会把祖先的变换提前弹掉 */
+  const stack: Array<{ m: Matrix; hidden: boolean; visHidden: boolean }> = []
   let current: Matrix = IDENTITY
+  /** display:none / 引用容器 / opacity:0：整棵子树都不画，后代无法撤销 */
+  let hidden = false
+  /** visibility:hidden：可被后代的 visibility:visible 撤销 */
+  let visHidden = false
 
   for (const tag of scanTags(svg)) {
     if (tag.closing) {
       const prev = stack.pop()
-      if (prev) current = prev
+      if (prev) {
+        current = prev.m
+        hidden = prev.hidden
+        visHidden = prev.visHidden
+      }
       continue
     }
     const text = tag.attrs.get('transform')
     const step = text ? matrixFromTransform(text) : null
     const next = step ? multiply(current, step) : current
 
-    if (tag.name === 'path') {
+    const vis = tag.attrs.get('visibility')
+    const hereHidden =
+      hidden ||
+      REFERENCED.has(tag.name) ||
+      tag.attrs.get('display') === 'none' ||
+      parseFloat(tag.attrs.get('opacity') ?? '1') === 0
+    const hereVisHidden = vis === 'visible' ? false : visHidden || vis === 'hidden'
+
+    if (tag.name === 'path' && !hereHidden && !hereVisHidden) {
       const d = decodeEntities(tag.attrs.get('d') ?? '')
       if (d.trim()) out.push({ d, matrix: next === IDENTITY ? null : next })
     }
-    if (!tag.selfClosing && CONTAINERS.has(tag.name)) {
-      stack.push(current)
+    if (!tag.selfClosing) {
+      stack.push({ m: current, hidden, visHidden })
       current = next
+      hidden = hereHidden
+      visHidden = hereVisHidden
     }
   }
   // 直接粘贴一段 path 数据（PRD 帮助文档教的用法）也能用

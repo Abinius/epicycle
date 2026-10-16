@@ -250,7 +250,7 @@ describe('deriveAsset', () => {
 
   it('派生资产的指纹就是它自己那组系数（不是父资产的）', () => {
     const child = deriveAsset(makeParent(), { mirrorY: true }, '2026-10-15T00:01:00.000Z', 1)
-    expect(child.meta.checksum.slice(0, 6)).toBe(child.id.slice(3))
+    expect(child.meta.checksum).toBe(child.id.slice(3))
   })
 
   it('恒等变换抛错：否则同指纹 → 同 id → 资产库 put 会覆盖父资产', () => {

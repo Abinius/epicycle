@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { sequencePerN, sequenceSlots, toValues, type SequenceSource } from '../core/sequence.js'
 import type { Coefficient, Theta } from '../core/types.js'
 import { useT } from '../i18n/context.js'
@@ -26,11 +26,14 @@ export interface SequencePatch {
  */
 export function SequencePanel({
   coeffs,
+  perN,
   K,
   T,
   onApply,
 }: {
   coeffs: readonly Coefficient[]
+  /** 当前 perN：注入会改它，清除注入时要还原到注入前那份，而不是清空——L2 手改也在 perN 里 */
+  perN: Theta['perN']
   /** 当前项数与周期：注入会改它们，清除时要还回去 */
   K: number
   T: number
@@ -41,8 +44,8 @@ export function SequencePanel({
   const [raw, setRaw] = useState('')
   const [seed, setSeed] = useState(7)
   const [note, setNote] = useState<string | null>(null)
-  /** 注入前的 K / T：清除时还回去，不然用户原来的设置就被序列悄悄改掉了 */
-  const before = useRef<{ K: number; T: number } | null>(null)
+  /** 注入前的 K / T / perN：清除时还回去，不然用户原来的设置（含 L2 手改）就被序列悄悄抹掉了 */
+  const [before, setBefore] = useState<{ K: number; T: number; perN: Theta['perN'] } | null>(null)
 
   const M = Math.max(1, coeffs.length - 1)
 
@@ -55,7 +58,7 @@ export function SequencePanel({
       return
     }
     // 只在第一次注入时记住原值；连续注入多次，清除还是要回到最开始那份
-    if (before.current === null) before.current = { K, T }
+    setBefore((prev) => prev ?? { K, T, perN })
     const slots = sequenceSlots(values, M)
     onApply({ perN: sequencePerN(coeffs, slots), K: slots.K, T: Number(slots.T.toFixed(2)) })
     setNote(
@@ -68,9 +71,9 @@ export function SequencePanel({
   }
 
   const clear = () => {
-    const b = before.current
-    onApply({ perN: {}, K: b?.K ?? K, T: b?.T ?? T })
-    before.current = null
+    if (!before) return
+    onApply({ perN: before.perN, K: before.K, T: before.T })
+    setBefore(null)
     setNote(null)
   }
 
@@ -87,7 +90,12 @@ export function SequencePanel({
     <section aria-label={t('数值序列')} className="flex flex-col gap-3 border-t border-hairline pt-4">
       <div className="flex items-baseline justify-between">
         <h2 className="text-sm text-mist/70">{t('数值序列')}</h2>
-        <button type="button" onClick={clear} className="text-xs text-mist/40 hover:text-mist">
+        <button
+          type="button"
+          onClick={clear}
+          disabled={before === null}
+          className="text-xs text-mist/40 hover:text-mist disabled:cursor-not-allowed disabled:text-mist/15 disabled:hover:text-mist/15"
+        >
           {t('清除注入')}
         </button>
       </div>

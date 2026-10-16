@@ -103,3 +103,46 @@ test('数值序列：文本模式按 UTF-16 取码，同一段文本结果一致
   await page.getByTestId('seq-apply').click()
   expect(await formula()).toBe(a)
 })
+
+test('清除注入还原 L2 手改，而不是清空 perN；按钮在未注入时禁用（bug 5 回归）', async ({ page }) => {
+  const errors: string[] = []
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text())
+  })
+  page.on('pageerror', (err) => errors.push(err.message))
+
+  await page.goto('/')
+  const formula = () => page.getByTestId('formula').innerText()
+  const clearBtn = page.getByRole('button', { name: '清除注入' })
+  const rows = page.getByTestId('coeff-row')
+  await expect(rows.first()).toBeVisible()
+
+  // 未注入时清除按钮禁用——没有东西可清除，不能让一次误点抹掉手改
+  await expect(clearBtn).toBeDisabled()
+
+  // L2 手改：点第二项，把幅度倍率 γ 拉到 0.5（step 0.05 允许），公式立刻变
+  const initial = await formula()
+  await rows.nth(1).click()
+  const gamma = page.getByRole('slider', { name: '幅度倍率 γ' })
+  await gamma.fill('0.5')
+  await expect.poll(() => formula()).not.toBe(initial)
+  const l2 = await formula()
+
+  // 注入一段序列：公式换成注入结果，清除按钮亮起
+  await page.getByTestId('seq-input').fill(series(64, 37, 101))
+  await page.getByTestId('seq-apply').click()
+  await expect(page.getByTestId('seq-note')).toContainText('已注入')
+  await expect(clearBtn).toBeEnabled()
+  expect(await formula()).not.toBe(l2)
+
+  // 清除注入：还原到注入前那份（含 L2 手改的 perN），而不是清空成预置
+  await clearBtn.click()
+  await expect(page.getByTestId('seq-note')).toHaveCount(0)
+  await expect(clearBtn).toBeDisabled()
+  await expect.poll(() => formula()).toBe(l2)
+  // 也不是没手改过的预置初始态——证明 perN 真被还原，不是被清空
+  expect(await formula()).not.toBe(initial)
+
+  await expect.poll(() => paintedPixels(page), { timeout: 8000 }).toBeGreaterThan(200)
+  expect(errors).toEqual([])
+})

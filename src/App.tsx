@@ -11,7 +11,7 @@ import { SpectrumPanel } from './components/SpectrumPanel.js'
 import { TermEditor } from './components/TermEditor.js'
 import { ValuePanel } from './components/ValuePanel.js'
 import { boundsOf, createAsset, exportJson, parseAsset } from './core/asset.js'
-import { ASSET_DIAGNOSTICS, diagnose, storedCorrupt, type Diagnostic } from './core/diagnostic.js'
+import { ASSET_DIAGNOSTICS, diagnose, SAMPLE_FAILED, storedCorrupt, type Diagnostic } from './core/diagnostic.js'
 import { deriveAssetFrom, type ShapeTransform } from './core/derive.js'
 import { buildScene } from './core/epicycle.js'
 import { gridFor, reconstructPoints } from './core/dft.js'
@@ -113,7 +113,7 @@ export default function App() {
   const activeFile = tab === 'svg' ? file : null
   const drawPath = useMemo(() => strokesToPath(strokes), [strokes])
   const shapeText = opened ? null : (activeFile?.text ?? (tab === 'draw' ? drawPath || null : null))
-  const prepared = useSvgWorker(shapeText, opts)
+  const { prepared, failed } = useSvgWorker(shapeText, opts)
 
   // 每次 Worker 交回新的采样结果就留一条 DFT 耗时（§11 的本地性能留档，不出这台机器）
   useEffect(() => {
@@ -122,7 +122,12 @@ export default function App() {
 
   // diagnose 便宜且依赖 K，留在主线程：拖 K 不再触发采样与 DFT
   const read = useMemo(() => {
-    if (!prepared || shapeText === null) return null
+    if (shapeText === null) return null
+    if (failed) {
+      // 采样中断：绝不把上一份素材的系数配到这份文件上——退回预置形状，诊断给出来
+      return { paths: 0, sample: null, coeffs: null, dft_ms: 0, diagnostics: [SAMPLE_FAILED], ok: false }
+    }
+    if (!prepared) return null
     const diagnostics = diagnose({
       svg: shapeText,
       bytes: activeFile?.bytes ?? shapeText.length,
@@ -136,7 +141,7 @@ export default function App() {
       diagnostics,
       ok: prepared.sample !== null && prepared.coeffs !== null && !diagnostics.some((d) => d.severity === 'error'),
     }
-  }, [prepared, shapeText, activeFile, theta.K])
+  }, [prepared, failed, shapeText, activeFile, theta.K])
 
   const presetData = useMemo(() => {
     const t0 = performance.now()
@@ -372,10 +377,14 @@ export default function App() {
   const onDerive = async (t: ShapeTransform) => {
     setDeriving(true)
     try {
-      // 父资产：打开着的就用它；否则先把当前形状冻结成父资产——派生得有一份来源可溯，
-      // 不能存一个指向不存在资产的 derived_from
-      let parent = opened
-      if (!parent) {
+      // 父资产：origin 才是当前画面上的形状。opened 与 origin 同源（未启用过渡、未走分享链接）
+      // 时直接复用；否则先把 origin 冻结成父资产——拿过渡前的 opened 当父会派生出错误形状，
+      // 也存了一个指向不存在资产的 derived_from
+      const sameOrigin = opened !== null && morph === null && shared === null
+      let parent: FourierAsset
+      if (sameOrigin && opened) {
+        parent = opened
+      } else {
         parent = createAsset({
           name: origin.name,
           createdAt: new Date().toISOString(),
@@ -508,6 +517,7 @@ export default function App() {
 
           <SequencePanel
             coeffs={origin.coeffs}
+            perN={theta.perN}
             K={theta.K}
             T={theta.T}
             onApply={(p) => patch(p)}
