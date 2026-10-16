@@ -1,12 +1,11 @@
 import { TWO_PI } from './complex.js'
 
-export type FormulaId = 'circle' | 'square' | 'heart' | 'star'
+export type FormulaId = 'square' | 'heart' | 'star'
 
 /** 内置公式生成器（模块 B 的入口）。每个生成器都是「参数 → 等参数间距点列」，
  * 之后走同一条 DFT → 动画管线，不是另一套代码。 */
 
 export const formulaNames: Record<FormulaId, string> = {
-  circle: '圆',
   square: '正方形',
   heart: '心形',
   star: '星形',
@@ -35,10 +34,6 @@ function make(id: FormulaId, N: number, fn: (t: number) => [number, number]): Sa
     if (y > maxY) maxY = y
   }
   return { id, name: formulaNames[id], points: out, bbox: [minX, minY, maxX, maxY] }
-}
-
-export function circle(N: number): Sampled {
-  return make('circle', N, (t) => [Math.cos(t), Math.sin(t)])
 }
 
 /** 正方形边界：按边序走四个角，相邻采样点落在边上 */
@@ -76,4 +71,4 @@ export function star(N: number, spikes = 5, depth = 0.35): Sampled {
   })
 }
 
-export const formulas: Record<FormulaId, (N: number) => Sampled> = { circle, square, heart, star }
+export const formulas: Record<FormulaId, (N: number) => Sampled> = { square, heart, star }

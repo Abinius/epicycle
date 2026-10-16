@@ -11,7 +11,7 @@ import { sample } from '../sampler.js'
 
 describe('预置清单', () => {
   it('六个预置：顺序即选择器顺序，中文名不重不漏', () => {
-    expect(PRESET_IDS).toEqual(['circle', 'square', 'heart', 'star', 'note', 'signature'])
+    expect(PRESET_IDS).toEqual(['badge', 'square', 'heart', 'star', 'note', 'signature'])
     expect(new Set(PRESET_IDS).size).toBe(PRESET_IDS.length)
     expect(Object.keys(PRESET_NAMES)).toEqual([...PRESET_IDS])
     for (const id of PRESET_IDS) expect(PRESET_NAMES[id], id).not.toHaveLength(0)
@@ -53,12 +53,20 @@ describe('预置清单', () => {
   })
 
   it('N 不是 2 的幂就抛错', () => {
-    expect(() => presetOf('circle', 10)).toThrow(/2 的幂/)
+    expect(() => presetOf('badge', 10)).toThrow(/2 的幂/)
     expect(() => presetOf('note', 10)).toThrow(/2 的幂/)
   })
 })
 
 describe('内建路径预置', () => {
+  it('徽标是单条闭合轮廓：没有子路径要串接，首尾自然重合', () => {
+    const preset = PATH_PRESETS.badge
+    const r = sample(preset.d, { N: PRESET_N, close_mode: preset.close_mode })
+    expect(r.subpaths).toBe(1)
+    expect(r.closed).toBe(true)
+    expect(r.gap).toBeLessThan(1e-6)
+  })
+
   it('音符：图标是三子路径（梁/符干/符头鼓包轮廓 + 两枚圆形符头），只取最长的那条轮廓', () => {
     const preset = PATH_PRESETS.note
     // 三条一起串接：笔会在符头与梁之间多画两条连接线，且首尾相距近 0.8 长边——不是闭合轮廓

@@ -139,7 +139,7 @@ describe('窗口上限', () => {
 
   it('宽带形状按 SPECTRUM_MAX_BINS 截断，带限形状窗口紧贴真实最高频率', () => {
     for (const [id, top, frequencies] of [
-      ['circle', 1, 1],
+      ['star', 6, 3],
       ['heart', 4, 8],
       ['signature', SPECTRUM_MAX_BINS, 1022],
     ] as const) {

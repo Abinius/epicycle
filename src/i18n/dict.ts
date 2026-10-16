@@ -274,7 +274,7 @@ const EN: Record<string, string> = {
     'Amplitudes and phases are spread with linear maps only — no modulo, no hashing — so similar input gives a similar animation.',
 
   // ---- 预置形状名（core 出的固定文案，按原文查表）----
-  圆: 'Circle',
+  徽标: 'Badge',
   正方形: 'Square',
   心形: 'Heart',
   星形: 'Star',

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { circle, formulaNames, formulas, heart, square, star } from '../formulas.js'
+import { formulaNames, formulas, heart, square, star } from '../formulas.js'
 
 function closeBbox(actual: readonly number[], expected: readonly number[]) {
   expect(actual.length).toBe(4)
@@ -7,8 +7,8 @@ function closeBbox(actual: readonly number[], expected: readonly number[]) {
 }
 
 describe('生成器接口', () => {
-  it('四个生成器：id 对应、点数为 2N、bbox 有序、中文名与注册表一致', () => {
-    expect(Object.keys(formulas)).toEqual(['circle', 'square', 'heart', 'star'])
+  it('三个生成器：id 对应、点数为 2N、bbox 有序、中文名与注册表一致', () => {
+    expect(Object.keys(formulas)).toEqual(['square', 'heart', 'star'])
     for (const [id, fn] of Object.entries(formulas)) {
       expect(formulaNames[id as keyof typeof formulaNames], id).toBeTruthy()
       for (const N of [16, 512]) {
@@ -19,16 +19,6 @@ describe('生成器接口', () => {
         expect(s.bbox[0]).toBeLessThanOrEqual(s.bbox[2])
         expect(s.bbox[1]).toBeLessThanOrEqual(s.bbox[3])
       }
-    }
-  })
-})
-
-describe('circle', () => {
-  it('半径恒为 1，bbox 恰为 ±1', () => {
-    const s = circle(1000)
-    closeBbox(s.bbox, [-1, -1, 1, 1])
-    for (let i = 0; i < s.points.length; i += 2) {
-      expect(Math.hypot(s.points[i], s.points[i + 1]), `k=${i / 2}`).toBeCloseTo(1, 10)
     }
   })
 })
