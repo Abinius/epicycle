@@ -33,7 +33,7 @@ const FORMATS: Array<{ id: ExportFormat; label: string }> = [
 ]
 
 /** 文件名模板（PRD §5.3）。真正落盘的名字在导出那一刻才定，因为里面带日期 */
-const NAME_HINT = 'fourierboard_<形状>_<W>x<H>_<fps>_<编码>_<日期>.<扩展名>'
+const NAME_HINT = 'epicycle_<形状>_<W>x<H>_<fps>_<编码>_<日期>.<扩展名>'
 
 interface Settings {
   format: ExportFormat

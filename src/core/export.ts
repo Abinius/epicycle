@@ -256,7 +256,7 @@ function slug(s: string): string {
   return s.trim().replace(/[\s/\\:*?"<>|]+/g, '_').replace(/^_+|_+$/g, '') || 'shape'
 }
 
-/** PRD §5.3 的文件名模板：fourierboard_<名>_<W>x<H>_<fps>_<codec>_<yyyymmdd>.<ext> */
+/** PRD §5.3 的文件名模板：epicycle_<名>_<W>x<H>_<fps>_<codec>_<yyyymmdd>.<ext> */
 export function fileName(opt: ExportOptions, plan: Plan, date: Date): string {
-  return `fourierboard_${slug(opt.name)}_${opt.width}x${opt.height}_${opt.fps}_${plan.tag}_${stamp(date)}.${plan.ext}`
+  return `epicycle_${slug(opt.name)}_${opt.width}x${opt.height}_${opt.fps}_${plan.tag}_${stamp(date)}.${plan.ext}`
 }

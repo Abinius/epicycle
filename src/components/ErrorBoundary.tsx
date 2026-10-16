@@ -15,7 +15,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
   }
 
   override componentDidCatch(error: Error, info: ErrorInfo): void {
-    console.error('[FourierBoard] 渲染出错', error, info.componentStack)
+    console.error('[Epicycle] 渲染出错', error, info.componentStack)
   }
 
   override render(): ReactNode {

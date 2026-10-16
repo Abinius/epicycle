@@ -1,6 +1,6 @@
-# 傅里叶画板 · FourierBoard
+# Epicycle
 
-[![CI](https://github.com/Abinius/fourierboard/actions/workflows/ci.yml/badge.svg)](https://github.com/Abinius/fourierboard/actions/workflows/ci.yml)
+[![CI](https://github.com/Abinius/epicycle/actions/workflows/ci.yml/badge.svg)](https://github.com/Abinius/epicycle/actions/workflows/ci.yml)
 ![纯前端](https://img.shields.io/badge/纯前端-零后端_·_不上传-3F6B4F)
 ![运行时依赖](https://img.shields.io/badge/运行时依赖-8_个_·_全_MIT-3F6B4F)
 ![Node](https://img.shields.io/badge/node-24-339933?logo=nodedotjs&logoColor=white)
@@ -14,7 +14,7 @@
 
 全部在浏览器本地计算：不上传、不收集、无需账号。
 
-> 任何闭合曲线，都是一串同步旋转的圆。
+> 形，由圆生。
 
 ## 它是什么
 
@@ -68,6 +68,7 @@ Node 24（CI 用的版本）。Windows 上如果 vitest 起不来并报 `Cannot 
 ## 目录结构
 
 ```
+public/           favicon.ico（浏览器图标）+ favicon.svg（界面左上角 LOGO），原样拷进 dist/
 src/
 ├── core/          纯数学，零依赖零 DOM，覆盖率目标 100%
 │   ├── types.ts       全产品的数据契约（Core 只依赖这一个文件）

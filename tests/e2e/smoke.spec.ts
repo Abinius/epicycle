@@ -42,7 +42,7 @@ async function freeze(page: Page) {
 
 test('首页渲染品牌与画布，且动画正在绘制', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByRole('heading', { name: '傅里叶画板' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Epicycle' })).toBeVisible()
   await expect(page.getByTestId('stage')).toBeVisible()
   await expect(page.getByText('不上传、不收集、无需账号')).toBeVisible()
 

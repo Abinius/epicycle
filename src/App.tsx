@@ -446,13 +446,12 @@ export default function App() {
 
   return (
     <div className="flex h-dvh flex-col">
-      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-hairline px-3 py-3 md:px-5">
-        <h1 className="font-serif text-xl tracking-wide">{t('傅里叶画板')}</h1>
-        {/* 中文模式才需要另挂一个拉丁文品牌名；英文模式下它就是标题本身 */}
-        {lang === 'zh' && <span className="text-[11px] uppercase tracking-[0.2em] text-mist/40">FourierBoard</span>}
-        <span className="ml-auto hidden text-xs text-mist/40 sm:block">
-          {t('任何闭合曲线，都是一串同步旋转的圆')}
-        </span>
+      <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-hairline px-3 py-3 md:px-5">
+        <div className="flex items-center gap-2">
+          <img src="/favicon.svg" alt="" aria-hidden="true" className="h-6 w-6 shrink-0" />
+          <h1 className="font-serif text-xl tracking-wide">Epicycle</h1>
+        </div>
+        <span className="ml-auto hidden text-xs text-mist/40 sm:block">{t('形，由圆生。')}</span>
         <button
           type="button"
           data-testid="lang-toggle"

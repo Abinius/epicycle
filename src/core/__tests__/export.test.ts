@@ -286,16 +286,16 @@ describe('gifOptions', () => {
 describe('fileName', () => {
   const plan = pickPlan('mp4', FULL, at(false, 1920, 1080))
 
-  it('按模板拼：fourierboard_<名>_<W>x<H>_<fps>_<codec>_<yyyymmdd>.<ext>', () => {
+  it('按模板拼：epicycle_<名>_<W>x<H>_<fps>_<codec>_<yyyymmdd>.<ext>', () => {
     const opt = base({ width: 1920, height: 1080, name: '心 形' })
     expect(fileName(opt, plan, new Date(Date.UTC(2026, 9, 15)))).toBe(
-      'fourierboard_心_形_1920x1080_30_h264_20261015.mp4',
+      'epicycle_心_形_1920x1080_30_h264_20261015.mp4',
     )
   })
 
   it('名字里的空白与路径字符换成下划线，空名兜底成 shape', () => {
     const opt = base({ name: 'a/b:c*?"<>|' })
-    expect(fileName(opt, plan, new Date(Date.UTC(2026, 0, 2)))).toContain('fourierboard_a_b_c_')
+    expect(fileName(opt, plan, new Date(Date.UTC(2026, 0, 2)))).toContain('epicycle_a_b_c_')
     expect(fileName(base({ name: '   ' }), plan, new Date(Date.UTC(2026, 0, 2)))).toContain('_shape_')
   })
 

@@ -30,10 +30,10 @@ test('导出：能力探测 → 落盘一个可下载的成品，文件名按模
     page.getByTestId('export-btn').click(),
   ])
 
-  // 文件名模板：fourierboard_<名>_<W>x<H>_<fps>_<codec>_<yyyymmdd>.<ext>
+  // 文件名模板：epicycle_<名>_<W>x<H>_<fps>_<codec>_<yyyymmdd>.<ext>
   // GIF 会被固定降采成 12 fps，所以帧率那段不做死值断言
   expect(download.suggestedFilename()).toMatch(
-    /^fourierboard_.*_\d+x\d+_\d+_(h264|vp9|vp8|gif|png)_\d{8}\.(mp4|webm|gif|zip)$/,
+    /^epicycle_.*_\d+x\d+_\d+_(h264|vp9|vp8|gif|png)_\d{8}\.(mp4|webm|gif|zip)$/,
   )
 
   const path = test.info().outputPath('export-out')

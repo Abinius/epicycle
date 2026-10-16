@@ -15,8 +15,7 @@ export type Lang = 'zh' | 'en'
  */
 const EN: Record<string, string> = {
   // ---- 通用 / 顶栏 / 页脚 ----
-  傅里叶画板: 'FourierBoard',
-  '任何闭合曲线，都是一串同步旋转的圆': 'Every closed curve is a string of circles spinning in step.',
+  '形，由圆生。': 'Form, born of circles.',
   当前: 'Current',
   播放: 'Play',
   暂停: 'Pause',
@@ -204,8 +203,8 @@ const EN: Record<string, string> = {
   '导出中 {done}/{total}': 'Exporting {done}/{total}',
   '导出失败：{msg}': 'Export failed: {msg}',
   '已导出 {name}（{size}，{frames} 帧）{note}': 'Exported {name} ({size}, {frames} frames){note}',
-  'fourierboard_<形状>_<W>x<H>_<fps>_<编码>_<日期>.<扩展名>':
-    'fourierboard_<shape>_<W>x<H>_<fps>_<codec>_<date>.<ext>',
+  'epicycle_<形状>_<W>x<H>_<fps>_<编码>_<日期>.<扩展名>':
+    'epicycle_<shape>_<W>x<H>_<fps>_<codec>_<date>.<ext>',
 
   // ---- 帮助对话框 ----
   快捷键: 'Keyboard shortcuts',
