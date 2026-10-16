@@ -642,35 +642,37 @@ export default function App() {
         </aside>
       </main>
 
-      <footer className="flex items-center gap-3 border-t border-hairline px-3 py-2 text-xs text-mist/40 md:px-5">
-        <button
-          type="button"
-          data-testid="help-open"
-          onClick={() => setHelp(true)}
-          className="shrink-0 rounded border border-hairline px-2 py-0.5 hover:border-sage/60 hover:text-mist"
-        >
-          {t('关于与帮助')}
-        </button>
-        <nav className="hidden items-center gap-2 sm:flex" aria-label={t('友情链接')}>
-          <span className="text-mist/30">{t('友情链接')}</span>
-          <a
-            href="https://www.xiaohongshu.com/user/profile/5e1eff3d000000000100ac79?xhsshare=userQrCode&exSource="
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-mist"
+      <footer className="flex flex-col items-center gap-1 border-t border-hairline px-3 py-2 text-xs text-mist/40 md:px-5">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            data-testid="help-open"
+            onClick={() => setHelp(true)}
+            className="shrink-0 rounded border border-hairline px-2 py-0.5 hover:border-sage/60 hover:text-mist"
           >
-            {t('七月的角落')}
-          </a>
-          <span className="text-mist/20">·</span>
-          <a href="https://www.abincheung.com" target="_blank" rel="noopener noreferrer" className="hover:text-mist">
-            Abin
-          </a>
-          <span className="text-mist/20">·</span>
-          <a href="https://www.vour.cn" target="_blank" rel="noopener noreferrer" className="hover:text-mist">
-            Signify
-          </a>
-        </nav>
-        <span className="ml-auto text-right">{t('全部在浏览器本地计算，不上传、不收集、无需账号')}</span>
+            {t('关于与帮助')}
+          </button>
+          <nav className="hidden items-center gap-2 sm:flex" aria-label={t('友情链接')}>
+            <span className="text-mist/30">{t('友情链接')}</span>
+            <a
+              href="https://www.xiaohongshu.com/user/profile/5e1eff3d000000000100ac79?xhsshare=userQrCode&exSource="
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-mist"
+            >
+              {t('七月的角落')}
+            </a>
+            <span className="text-mist/20">·</span>
+            <a href="https://www.abincheung.com" target="_blank" rel="noopener noreferrer" className="hover:text-mist">
+              Abin
+            </a>
+            <span className="text-mist/20">·</span>
+            <a href="https://www.vour.cn" target="_blank" rel="noopener noreferrer" className="hover:text-mist">
+              Signify
+            </a>
+          </nav>
+        </div>
+        <span className="text-center">{t('全部在浏览器本地计算，不上传、不收集、无需账号')}</span>
       </footer>
 
       <HelpDialog open={help} onClose={() => setHelp(false)} />
