@@ -28,14 +28,19 @@ export const PRESET_N = 1024
 /**
  * 内建路径预置。d 是 SVG path 数据（y 向下，采样器负责翻成数学坐标）。
  *
- * 音符：符干左缘与符头椭圆在 x=46 处相切，整条轮廓天然闭合，用直线闭合即可。
+ * 音符：斜体连音符。图标由三条子路径组成——梁/符干/符头鼓包的闭合轮廓，加两枚与鼓包重叠
+ * 的圆形符头。取最长子路径即得整条可见轮廓；若三条一起串接，会多出两条连接符头与梁的直线。
  * 签名：开放笔迹，首尾相隔很远；用镜像回扫（笔迹画过去再画回来），
  * 用 join 会画出一条横贯整个字形的连线。
  */
-export const PATH_PRESETS: Record<PathPresetId, { d: string; close_mode: SampleOptions['close_mode'] }> = {
+export const PATH_PRESETS: Record<
+  PathPresetId,
+  { d: string } & Pick<SampleOptions, 'close_mode' | 'longest_only'>
+> = {
   note: {
-    d: 'M 46 26 L 49.6 26 L 49.6 106 L 46 106 A 16 11 0 0 1 14 106 A 16 11 0 0 1 46 106 Z',
+    d: 'M951.104 49.984A93.696 93.696 0 0 0 865.088 37.12L416.256 191.616A99.968 99.968 0 0 0 352 284.928v373.12a191.232 191.232 0 1 0 64 142.016v-515.2a35.392 35.392 0 0 1 21.952-33.024l447.808-154.24a30.272 30.272 0 0 1 28.096 4.352 34.176 34.176 0 0 1 14.144 28.16v400a191.232 191.232 0 1 0 64 142.016v-542.08a98.688 98.688 0 0 0-40.896-80zM224 928a128 128 0 1 1 128-128 128.128 128.128 0 0 1-128 128zm576-128a128 128 0 1 1 128-128 128.128 128.128 0 0 1-128 128z',
     close_mode: 'join',
+    longest_only: true,
   },
   signature: {
     d: 'M 24 78 C 28 46 44 30 52 46 C 58 60 46 70 40 62 C 34 54 48 42 62 46 C 74 50 76 64 88 66 C 100 68 102 50 112 46 C 124 42 132 54 128 62 C 122 70 110 66 116 56 C 122 46 138 42 150 48 C 164 54 168 66 180 66 C 194 66 198 48 212 44 C 228 40 234 52 228 60 C 220 68 236 70 250 64 C 268 56 284 50 296 40 C 302 34 306 30 308 26',
@@ -72,8 +77,8 @@ export function presetOf(id: PresetId, N: number = PRESET_N): Preset {
       sample: { points, N, closed: true, close_mode: 'join', subpaths: 1, subdivide_eps: 0 },
     }
   }
-  const { d, close_mode } = PATH_PRESETS[id]
-  const s = sample(d, { N, close_mode })
+  const { d, close_mode, longest_only } = PATH_PRESETS[id]
+  const s = sample(d, { N, close_mode, longest_only })
   return {
     coeffs: dft(s.points, N),
     sample: { points: s.points, N, closed: s.closed, close_mode, subpaths: s.subpaths, subdivide_eps: s.tolerance },

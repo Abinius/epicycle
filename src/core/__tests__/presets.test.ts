@@ -58,29 +58,25 @@ describe('预置清单', () => {
   })
 })
 
-/** 闭合折线围成的面积（鞋带公式），用来校验内建路径画的是不是想要的轮廓 */
-function areaOf(points: Float64Array): number {
-  const n = points.length / 2
-  let twice = 0
-  for (let k = 0; k < n; k++) {
-    const i = 2 * ((k + 1) % n)
-    twice += points[2 * k] * points[i + 1] - points[i] * points[2 * k + 1]
-  }
-  return Math.abs(twice / 2)
-}
-
 describe('内建路径预置', () => {
-  it('音符是天然闭合的轮廓：面积 = 符头椭圆 + 符干矩形', () => {
+  it('音符：图标是三子路径（梁/符干/符头鼓包轮廓 + 两枚圆形符头），只取最长的那条轮廓', () => {
     const preset = PATH_PRESETS.note
-    const result = sample(preset.d, { N: PRESET_N, close_mode: preset.close_mode })
-    expect(result.closed).toBe(true)
-    expect(result.gap).toBeLessThan(1e-6)
-    // 椭圆 π·rx·ry + 符干 3.6 × 80；两者只在切点相接，重叠面积为 0
-    // 采样是弦逼近，面积略小于真值，所以给 1% 的余量
-    const expected = Math.PI * 16 * 11 + 3.6 * 80
-    const area = areaOf(result.points)
-    expect(area / expected).toBeGreaterThan(0.99)
-    expect(area / expected).toBeLessThan(1.01)
+    // 三条一起串接：笔会在符头与梁之间多画两条连接线，且首尾相距近 0.8 长边——不是闭合轮廓
+    const all = sample(preset.d, { N: PRESET_N, close_mode: preset.close_mode })
+    expect(all.subpaths).toBe(3)
+    expect(all.closed).toBe(false)
+    expect(all.gap).toBeGreaterThan(0.5)
+
+    // 最长子路径就是整条可见轮廓：天然闭合、首尾重合，包围盒占满 1024 见方的 viewBox
+    const longest = sample(preset.d, { N: PRESET_N, close_mode: preset.close_mode, longest_only: true })
+    expect(longest.subpaths).toBe(1)
+    expect(longest.closed).toBe(true)
+    expect(longest.gap).toBeLessThan(1e-6)
+    const [minX, minY, maxX, maxY] = longest.bbox
+    expect(maxX - minX).toBeGreaterThan(800)
+    expect(maxY - minY).toBeGreaterThan(800)
+    // 预置走的正是这条：presetOf 把 longest_only 传下去了
+    expect(presetOf('note').sample.subpaths).toBe(1)
   })
 
   it('签名是开放笔迹：直线闭合会连出一条横线，所以必须镜像回扫', () => {
