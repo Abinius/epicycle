@@ -118,6 +118,17 @@ vercel --prod     # 首次会要求登录并关联项目
 - `font-src` 必须带 `data:`——KaTeX 的字体里有一个小到构建时被内联成 data URI。
 - `style-src` 必须带 `'unsafe-inline'`——KaTeX 大量用 `style` 属性排版，去掉会挂掉 13 条 E2E。
 
+### 自建服务器部署（abrz.cn）
+
+线上实际跑在香港 ECS 的自建 nginx 上，不走 Vercel：工作站 `npm run build` 出 `dist/`，上传后由站点根目录的 `epicycle-deploy.sh` 部署（自动备份 / 受保护内容校验和比对 / 失败回滚）。
+
+把 `vercel.json` 的思路照搬到 nginx 会踩两个坑，都是实测出来的：
+
+- **SPA 兜底必须用 `try_files $uri $uri/ /index.html`**。写成 `rewrite ^/(.*)$ /index.html` 会把同域下的其它站点子目录一并吞掉。
+- **CSP 必须限定在 `location` 作用域**（如 `location = /index.html`），不能提到 `server` 级。同域下另有页面依赖内联 `<script>`，严格 CSP 一旦全站生效就会打断它。
+
+服务器侧不跑前端构建（内存 1.8G，零构建约定），产物一律在工作站编译后上传。
+
 ## 许可证
 
 **仓库公开，但不是开源。** 这里没有 LICENSE 文件，即保留所有权利（All rights reserved）。可以阅读、可以按 GitHub 的条款 fork，但没有被授予使用、修改、分发或商用的许可。
