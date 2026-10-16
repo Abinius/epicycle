@@ -28,3 +28,55 @@ body {
   color: var(--color-mist);
   -webkit-font-smoothing: antialiased;
 }
+
+/*
+ * 滑块（Range.tsx）。原生的轨道 + 滑块在这套扁平 + hairline 的界面里太"重"，
+ * 统一压成「一根细轨 + 一颗圆点」：轨道用 4px 的渐变带画（填充比例由组件内联给出，
+ * WebKit/Gecko 都读 input 自己的 background），输入框本身留 16px 高好点、好按。
+ */
+.range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 16px;
+  background-color: transparent;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 4px;
+  cursor: pointer;
+}
+
+.range::-webkit-slider-runnable-track {
+  height: 4px;
+  background: transparent;
+}
+
+.range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  margin-top: -4.5px; /* (4 − 13) / 2，把圆点居中到细轨上 */
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-sage);
+}
+
+.range::-moz-range-track,
+.range::-moz-range-progress {
+  height: 4px;
+  background: transparent;
+}
+
+.range::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-sage);
+}
+
+.range:focus-visible {
+  outline: 2px solid var(--color-sage);
+  outline-offset: 2px;
+}
