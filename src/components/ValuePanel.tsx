@@ -66,7 +66,7 @@ export function ValuePanel({
         max={5}
         step={0.1}
         onChange={(v) => onPatch({ scale: Number(v.toFixed(2)) })}
-        hint={t('等权化时是所有圆的统一半径；其余模式只移动质心位置。')}
+        hint={t('关于质心整体放大或缩小整条曲线与圆链。')}
       />
       <Range
         label={t('全局相位 (弧度)')}

@@ -76,8 +76,7 @@ const EN: Record<string, string> = {
     'How many circles take part, largest amplitude first. If the shape’s spectrum is band-limited, a larger K adds nothing.',
   轨迹比例: 'Trail length',
   整体缩放: 'Scale',
-  '等权化时是所有圆的统一半径；其余模式只移动质心位置。':
-    'Under equalize, the shared radius of every circle; otherwise it only moves the centroid.',
+  '关于质心整体放大或缩小整条曲线与圆链。': 'Zoom the whole curve and its circles about the centroid.',
   '全局相位 (弧度)': 'Global phase (rad)',
   '周期 T (秒)': 'Period T (s)',
   播放速度: 'Speed',

@@ -145,7 +145,7 @@ describe('buildScene 算子', () => {
 
   it('n=0 作为原点，其余项按模降序；M 为输入系数总数', () => {
     const s = buildScene(coeffs, theta({ scale: 2 }))
-    expect(s.center).toEqual({ re: 2, im: 1 })
+    expect(s.center).toEqual({ re: 1, im: 0.5 })
     expect(s.terms.map((t) => t.n)).toEqual([3, -3, 11])
     expect(s.M).toBe(4)
     expect(s.K).toBe(3)
@@ -155,6 +155,14 @@ describe('buildScene 算子', () => {
     const s = buildScene(coeffs, theta())
     expect(s.viewScale).toBeCloseTo(0.8 / 4.5, 12)
     expect(s.terms.reduce((acc, t) => acc + t.weight, 0)).toBeCloseTo(1, 12)
+  })
+
+  it('scale 整体缩放 viewScale，不改半径与质心', () => {
+    const base = buildScene(coeffs, theta())
+    const zoomed = buildScene(coeffs, theta({ scale: 2.5 }))
+    expect(zoomed.viewScale).toBeCloseTo(base.viewScale * 2.5, 12)
+    expect(zoomed.center).toEqual(base.center)
+    expect(zoomed.terms.map((t) => t.radius)).toEqual(base.terms.map((t) => t.radius))
   })
 
   it('K 截断：K≤0 保底 1 项，K 超上限取全部', () => {
@@ -181,10 +189,11 @@ describe('buildScene 算子', () => {
     expect(s.terms[1].radius).toBeCloseTo(1, 12)
   })
 
-  it('等权化把所有半径归一到 scale', () => {
+  it('等权化把所有半径归一到 1，scale 整体放大 viewScale', () => {
     const eq = buildScene(coeffs, theta({ equalize: true, scale: 3 }))
-    expect(eq.terms.every((t) => t.radius === 3)).toBe(true)
-    expect(eq.viewScale).toBeCloseTo(0.8 / 9, 12)
+    expect(eq.terms.every((t) => t.radius === 1)).toBe(true)
+    // 3 项参与、sum=3；viewScale = 0.8·scale/sum = 0.8·3/3 = 0.8
+    expect(eq.viewScale).toBeCloseTo(0.8, 12)
   })
 
   it('全局相位偏移作用于所有项', () => {

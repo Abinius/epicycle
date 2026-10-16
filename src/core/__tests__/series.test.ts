@@ -103,7 +103,7 @@ describe('seriesOf：公式与系数表的唯一数据源', () => {
 
   it('等权化：所有项半径取统一值，贡献度均分', () => {
     const s = seriesOf(buildScene(COEFFS, theta({ K: 8, equalize: true, scale: 2 })))
-    expect(s.rows.every((r) => r.radius === 2)).toBe(true)
+    expect(s.rows.every((r) => r.radius === 1)).toBe(true)
     expect(s.rows.every((r) => r.weight === 1 / 3)).toBe(true)
   })
 

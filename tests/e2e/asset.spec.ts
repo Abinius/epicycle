@@ -68,13 +68,13 @@ test('手绘：笔画串成一条路径，出动画并报未闭合，两种闭�
   await drawArc(page)
   await expect(page.getByTestId('stroke-count')).toHaveText('1 笔')
   await expect(page.getByTestId('shape-name')).toContainText('手绘')
-  // 开放笔迹：直线闭合会留一道缺口，诊断按 §10 #5 报出来
-  await expect(page.getByLabel('预检诊断')).toContainText('没有首尾相连')
+  // 手绘默认镜像回扫：开放笔迹回扫闭合，没有缺口
+  await expect(page.getByLabel('预检诊断')).toHaveCount(0)
   await expect.poll(() => paintedPixels(page), { timeout: 8000 }).toBeGreaterThan(200)
 
-  // 换成镜像回扫：诊断消失（没有任何诊断时整个列表不渲染）
-  await page.getByLabel('闭合方式').selectOption('mirror')
-  await expect(page.getByLabel('预检诊断')).toHaveCount(0)
+  // 换成直线闭合：开放笔迹留一道缺口，诊断按 §10 #5 报出来
+  await page.getByLabel('闭合方式').selectOption('join')
+  await expect(page.getByLabel('预检诊断')).toContainText('没有首尾相连')
 
   // 再画一笔：两笔各是一条子路径，画面照旧
   await drawArc(page)

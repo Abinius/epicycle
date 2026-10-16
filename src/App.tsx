@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AssetPanel, type Frozen } from './components/AssetPanel.js'
 import { DerivePanel } from './components/DerivePanel.js'
 import { ExportPanel } from './components/ExportPanel.js'
@@ -79,6 +79,12 @@ export default function App() {
   const [strokes, setStrokes] = useState<Stroke[]>([])
   const [opened, setOpened] = useState<FourierAsset | null>(null)
   const [opts, setOpts] = useState<SourceOptions>({ N: 1024, close_mode: 'join', longest_only: false })
+  /**
+   * 闭合方式是**按页签各记各的**：上传的 SVG 一般本就闭合，走直线闭合；手绘笔迹多是开放的，
+   * 直线闭合会在首尾间连出多余直线，默认镜像回扫。切页签时把该页签上次的选择还回去，
+   * 用户改过的选择不会被另一次切换悄悄冲掉。
+   */
+  const closureByTab = useRef<Record<SourceTab, SourceOptions['close_mode']>>({ svg: 'join', draw: 'mirror' })
 
   const [assets, setAssets] = useState<FourierAsset[]>([])
   const [assetDiag, setAssetDiag] = useState<Diagnostic[]>([])
@@ -254,6 +260,7 @@ export default function App() {
   }
   const onTab = (next: SourceTab) => {
     setTab(next)
+    setOpts((o) => (o.close_mode === closureByTab.current[next] ? o : { ...o, close_mode: closureByTab.current[next] }))
     setOpened(null)
     setShared(null)
     setMorph(null)
@@ -494,6 +501,7 @@ export default function App() {
               setPickedN(null)
             }}
             onChange={(p) => {
+              if (p.close_mode) closureByTab.current[tab] = p.close_mode
               setOpts((o) => ({ ...o, ...p }))
               setPickedN(null)
             }}

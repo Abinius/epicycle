@@ -10,6 +10,11 @@ import { TWO_PI, wrap01 } from './complex.js'
  * 只需要正确地把 θ 翻译成 c_n 的变换。
  *
  * n=0 项（路径质心）是常数，没有相位概念，单独作为场景原点返回。
+ *
+ * θ.scale 是「整体缩放」：乘进 viewScale，让整条曲线连同圆链一起放大/缩小
+ * （渲染器以质心居中，所以是关于质心的缩放）。等权化模式把每项半径归一到
+ * 固定基数 1，大小同样由 scale 经 viewScale 统一控制——过去把 scale 同时塞进
+ * 等权化半径会被 viewScale = 0.8/Σradius 归一化抵消，滑块等于空操作。
  */
 /** readonly 数组不匹配 `Array.isArray` 的 `any[]` 守卫，故需显式类型守卫才能收窄 union */
 function isCoefficients(v: FourierAsset | readonly Coefficient[]): v is readonly Coefficient[] {
@@ -24,7 +29,7 @@ export function buildScene(source: FourierAsset | readonly Coefficient[], theta:
 
   for (const c of coeffs) {
     if (c.n === 0) {
-      center = { re: c.re * theta.scale, im: c.im * theta.scale }
+      center = { re: c.re, im: c.im }
       continue
     }
     const an = Math.abs(c.n)
@@ -34,7 +39,7 @@ export function buildScene(source: FourierAsset | readonly Coefficient[], theta:
 
     const r0 = Math.hypot(c.re, c.im)
     if (r0 < 1e-12) continue
-    const radius = theta.equalize ? theta.scale : r0 * (p?.s ?? 1)
+    const radius = theta.equalize ? 1 : r0 * (p?.s ?? 1)
     if (radius < 1e-12) continue
 
     const phase = Math.atan2(c.im, c.re) + theta.phaseShift + theta.slope * c.n + (p?.dphi ?? 0)
@@ -47,7 +52,7 @@ export function buildScene(source: FourierAsset | readonly Coefficient[], theta:
   const active = terms.slice(0, K)
   for (const t of active) t.weight = sum > 0 ? t.radius / sum : 0
 
-  return { center, terms: active, viewScale: VIEW_BUDGET / Math.max(sum, 1e-9), K, M: coeffs.length }
+  return { center, terms: active, viewScale: (VIEW_BUDGET * theta.scale) / Math.max(sum, 1e-9), K, M: coeffs.length }
 }
 
 /**
